@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, setDoc, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, setDoc, onSnapshot, doc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         Chart.register(ChartDataLabels);
 
@@ -504,12 +504,14 @@
                 dashboardBranchFilter.classList.add('hidden');
                 uiDisplayBranch.classList.remove('hidden');
                 uiDisplayBranch.innerText = "Sales Daily Report";
+                document.getElementById('admin-clear-section').classList.remove('hidden');
                 updateDashboard("");
             } else if (page === 'dashboard-branch') {
                 filterContainer.classList.add('grid-cols-2');
                 filterContainer.classList.remove('grid-cols-1');
                 dashboardBranchFilter.classList.remove('hidden');
                 uiDisplayBranch.classList.add('hidden');
+                document.getElementById('admin-clear-section').classList.add('hidden');
                 if(!dashboardBranchFilter.value && selectedBranch) {
                     dashboardBranchFilter.value = selectedBranch;
                 } else if (!dashboardBranchFilter.value) {
@@ -648,6 +650,41 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        };
+
+        // --- Clear All Data ---
+        window.confirmClearData = () => {
+            document.getElementById('clear-pin').value = '';
+            document.getElementById('pin-error').classList.add('hidden');
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('clear-pin').focus(), 100);
+        };
+        window.cancelClear = () => {
+            document.getElementById('confirm-modal').classList.add('hidden');
+        };
+        window.clearAllData = async () => {
+            const pin = document.getElementById('clear-pin').value;
+            if (pin !== '111') {
+                document.getElementById('pin-error').classList.remove('hidden');
+                document.getElementById('clear-pin').value = '';
+                document.getElementById('clear-pin').focus();
+                return;
+            }
+            document.getElementById('confirm-modal').classList.add('hidden');
+            const btn = document.getElementById('clear-data-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-pulse">กำลังลบ...</span>';
+            try {
+                const snapshot = await getDocs(salesCol);
+                const deletes = snapshot.docs.map(d => deleteDoc(doc(db, 'sales', d.id)));
+                await Promise.all(deletes);
+                showErrorMessage("✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว");
+            } catch(err) {
+                showErrorMessage("❌ ลบไม่สำเร็จ: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'ลบทั้งหมด';
+            }
         };
 
         // --- Form Submission ---
@@ -1097,6 +1134,30 @@
                 </div>
             </div>
             <!-- ── END EXECUTIVE SECTION ── -->
+
+            <!-- Admin: Clear Data (Overall only) -->
+            <div id="admin-clear-section" class="hidden text-center pb-2">
+                <button onclick="confirmClearData()" class="text-[10px] text-slate-400 font-bold hover:text-rose-400 transition-colors flex items-center gap-1 mx-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    ล้างข้อมูลทั้งหมด
+                </button>
+            </div>
+
+            <!-- Confirm Modal -->
+            <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-6" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);">
+                <div class="glass-card rounded-[2rem] p-7 w-full max-w-sm space-y-5 text-center">
+                    <div class="text-4xl">🔐</div>
+                    <h2 class="text-xl font-black font-jakarta text-white">ป้อนรหัสผ่าน</h2>
+                    <p class="text-slate-400 text-sm">กรอกรหัสเพื่อยืนยันการลบข้อมูลทั้งหมด</p>
+                    <input id="clear-pin" type="password" maxlength="6" placeholder="••••" inputmode="numeric"
+                        class="w-full p-4 glass-input rounded-2xl outline-none font-black text-2xl text-white text-center tracking-[0.5em]">
+                    <p id="pin-error" class="hidden text-rose-400 text-xs font-bold">รหัสไม่ถูกต้อง</p>
+                    <div class="flex gap-3">
+                        <button onclick="cancelClear()" class="btn-secondary flex-1 text-slate-300 font-bold py-3.5 rounded-2xl text-sm">ยกเลิก</button>
+                        <button onclick="clearAllData()" id="clear-data-btn" class="flex-1 font-black py-3.5 rounded-2xl text-sm text-white" style="background:linear-gradient(135deg,#dc2626,#b91c1c);box-shadow:0 4px 20px rgba(220,38,38,0.4);">ลบทั้งหมด</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- ── BRANCH SECTION ── -->
             <div id="branch-manpower-stats" class="hidden grid grid-cols-2 gap-3">
