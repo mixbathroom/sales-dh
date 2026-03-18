@@ -272,6 +272,7 @@
                 document.getElementById('exec-leaderboard').classList.remove('hidden');
                 document.getElementById('exec-branch-compare').classList.remove('hidden');
                 document.getElementById('exec-data-table').classList.remove('hidden');
+                document.getElementById('exec-analysis').classList.remove('hidden');
                 document.getElementById('branch-weekly-stats').classList.add('hidden');
                 document.getElementById('branch-manpower-stats').classList.add('hidden');
 
@@ -298,10 +299,13 @@
                 renderLeaderboard(branchStats);
                 renderAllBranchesChart(branchStats);
                 renderDataTable(branchStats);
+                renderDayAnalysis(weekDaysSales);
+                renderDecadeAnalysis(sortedMonthDocs, currentYear, currentMonth);
             } else {
                 document.getElementById('exec-leaderboard').classList.add('hidden');
                 document.getElementById('exec-branch-compare').classList.add('hidden');
                 document.getElementById('exec-data-table').classList.add('hidden');
+                document.getElementById('exec-analysis').classList.add('hidden');
                 document.getElementById('branch-weekly-stats').classList.remove('hidden');
 
                 if (selectedBranch && latestByBranch[selectedBranch]) {
@@ -314,6 +318,97 @@
                 document.getElementById('branch-manpower-stats').classList.remove('hidden');
                 renderWeeklyChart(weekDaysSales);
             }
+        }
+
+        function renderDayAnalysis(weekSales) {
+            const dayNames = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+            const dayFull  = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+            // weekSales index: 0=อา, 1=จ, ..., 6=ส
+            const data = [weekSales[1], weekSales[2], weekSales[3], weekSales[4], weekSales[5], weekSales[6], weekSales[0]];
+            const maxVal = Math.max(...data);
+            const minVal = Math.min(...data.filter(v => v > 0));
+            const maxIdx = data.indexOf(maxVal);
+            const minIdx = data.indexOf(minVal);
+
+            let html = '';
+            data.forEach((val, i) => {
+                const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+                const isBest  = i === maxIdx && maxVal > 0;
+                const isWorst = i === minIdx && minVal > 0 && val === minVal;
+                const barColor = isBest ? 'bg-emerald-400' : isWorst ? 'bg-rose-400' : 'bg-blue-500/60';
+                const labelColor = isBest ? 'text-emerald-300' : isWorst ? 'text-rose-300' : 'text-slate-400';
+                html += `
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-bold text-slate-400 w-8 shrink-0">${dayNames[i]}</span>
+                    <div class="flex-1 h-2.5 rounded-full bg-white/5 overflow-hidden">
+                        <div class="${barColor} h-full rounded-full transition-all" style="width:${pct.toFixed(1)}%"></div>
+                    </div>
+                    <span class="text-[10px] font-bold ${labelColor} w-24 text-right shrink-0">${val > 0 ? val.toLocaleString() : '—'}${isBest ? ' 🏆' : isWorst ? ' ⚠️' : ''}</span>
+                </div>`;
+            });
+
+            const bestDay  = maxVal > 0 ? dayFull[maxIdx] : '—';
+            const worstDay = minVal > 0 ? dayFull[minIdx] : '—';
+
+            document.getElementById('day-analysis-bars').innerHTML = html;
+            document.getElementById('day-best').innerText  = `วัน${bestDay}`;
+            document.getElementById('day-worst').innerText = `วัน${worstDay}`;
+        }
+
+        function renderDecadeAnalysis(docs, year, month) {
+            // คำนวณยอดรายวัน (daily diff) แยกตาม decade
+            const dailyDiff = {};
+            const branchLatest = {};
+
+            const sorted = [...docs].sort((a,b) => new Date(a.date) - new Date(b.date));
+            sorted.forEach(d => {
+                if (!branchLatest[d.branch]) branchLatest[d.branch] = {};
+                const prevDates = Object.keys(branchLatest[d.branch]).sort();
+                const lastDate = prevDates.length ? prevDates[prevDates.length - 1] : null;
+                const prevVal = lastDate ? branchLatest[d.branch][lastDate] : 0;
+                const diff = Math.max(0, Number(d.actual) - prevVal);
+                if (!dailyDiff[d.date]) dailyDiff[d.date] = 0;
+                dailyDiff[d.date] += diff;
+                branchLatest[d.branch][d.date] = Number(d.actual);
+            });
+
+            let d1 = 0, d2 = 0, d3 = 0;
+            Object.entries(dailyDiff).forEach(([dateStr, val]) => {
+                const day = new Date(dateStr).getDate();
+                if (day <= 10) d1 += val;
+                else if (day <= 20) d2 += val;
+                else d3 += val;
+            });
+
+            const maxD = Math.max(d1, d2, d3);
+            const decades = [
+                { label: '10 วันแรก', sub: 'วันที่ 1–10', val: d1 },
+                { label: '10 วันที่ 2', sub: 'วันที่ 11–20', val: d2 },
+                { label: '10 วันที่ 3', sub: 'วันที่ 21–31', val: d3 },
+            ];
+            const bestIdx = decades.indexOf(decades.find(d => d.val === maxD));
+
+            let html = '';
+            decades.forEach((dec, i) => {
+                const pct = maxD > 0 ? (dec.val / maxD) * 100 : 0;
+                const isBest = dec.val === maxD && maxD > 0;
+                const barColor = isBest ? 'bg-amber-400' : 'bg-blue-500/60';
+                const cardBg = isBest ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/6 bg-white/2';
+                html += `
+                <div class="p-3 rounded-2xl border ${cardBg}">
+                    <div class="flex justify-between items-center mb-2">
+                        <div>
+                            <span class="text-[11px] font-black text-white">${dec.label}</span>
+                            <span class="text-[9px] text-slate-500 ml-1">${dec.sub}</span>
+                        </div>
+                        <span class="text-[11px] font-bold ${isBest ? 'text-amber-300' : 'text-slate-400'}">${dec.val > 0 ? dec.val.toLocaleString() : '—'}${isBest ? ' 🏆' : ''}</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                        <div class="${barColor} h-full rounded-full" style="width:${pct.toFixed(1)}%"></div>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('decade-analysis-bars').innerHTML = html;
         }
 
         function renderLeaderboard(stats) {
@@ -624,11 +719,23 @@
             ]);
 
             // Overall Ach
-            const totalActual  = currentBranchStats.reduce((s, d) => s + d.actual, 0);
-            const totalTarget  = currentBranchStats.reduce((s, d) => s + d.target, 0);
-            const overallAch   = totalTarget > 0 ? totalActual / totalTarget : 0;
-            totalRow.getCell(6).value = overallAch;
-            totalRow.getCell(6).numFmt = '0.0%';
+            const totalActual   = currentBranchStats.reduce((s, d) => s + d.actual, 0);
+            const totalTarget   = currentBranchStats.reduce((s, d) => s + d.target, 0);
+            const totalForecast = currentBranchStats.reduce((s, d) => s + d.forecast, 0);
+            const totalMs       = currentBranchStats.reduce((s, d) => s + d.actual, 0);
+            const totalCompSales = currentBranchStats.reduce((s, d) => {
+                // ms = actual / (actual + comp) => comp = actual * (1/ms - 1)
+                const comp = d.ms > 0 ? d.actual * (100 / d.ms - 1) : 0;
+                return s + comp;
+            }, 0);
+
+            const overallAch      = totalTarget > 0 ? totalActual / totalTarget : 0;
+            const overallFcAch    = totalTarget > 0 ? totalForecast / totalTarget : 0;
+            const overallMs       = (totalActual + totalCompSales) > 0 ? totalActual / (totalActual + totalCompSales) : 0;
+
+            totalRow.getCell(6).value = overallAch;       totalRow.getCell(6).numFmt = '0.0%';
+            totalRow.getCell(8).value = overallFcAch;     totalRow.getCell(8).numFmt = '0.0%';
+            totalRow.getCell(9).value = overallMs;        totalRow.getCell(9).numFmt = '0.0%';
 
             totalRow.height = 28;
             totalRow.eachCell((cell, col) => {
@@ -931,7 +1038,7 @@
             width: 100vw;
             height: 350px;
             background: radial-gradient(ellipse 40% 70% at -5% 0%, rgba(147,197,253,0.15) 0%, rgba(99,155,255,0.05) 50%, transparent 70%);
-            z-index: 0;
+            z-index: -1;
         }
         .spotlight-bottom {
             pointer-events: none;
@@ -941,7 +1048,7 @@
             width: 100vw;
             height: 180px;
             background: radial-gradient(ellipse 70% 100% at 50% 100%, rgba(29,78,216,0.12) 0%, rgba(30,64,175,0.05) 50%, transparent 80%);
-            z-index: 0;
+            z-index: -1;
         }
     </style>
 </head>
@@ -955,7 +1062,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!--  ENTRY PAGE                                           -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div id="entry-page" class="min-h-screen flex flex-col p-4 max-w-md mx-auto">
+    <div id="entry-page" class="min-h-screen flex flex-col p-4 max-w-md mx-auto" style="position:relative;z-index:1;">
 
         <!-- Header -->
         <header class="pt-2 pb-5">
@@ -968,7 +1075,7 @@
                         <h1 class="text-2xl font-black font-jakarta text-white tracking-tight leading-tight">Sales Daily Report</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <p class="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em]">รายงานยอดสะสม MTD</p>
-                            <span class="text-[9px] text-slate-600 font-bold">V1.08</span>
+                            <span class="text-[9px] text-slate-600 font-bold">V1.12</span>
                         </div>
                     </div>
                 </div>
@@ -1071,13 +1178,13 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!--  DASHBOARD PAGE                                       -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div id="dashboard-page" class="hidden min-h-screen pb-32">
+    <div id="dashboard-page" class="hidden min-h-screen pb-32" style="position:relative;z-index:1;">
 
         <!-- Sticky Header -->
         <header class="header-glass px-4 pt-3 pb-3 sticky top-0 z-10">
             <div class="flex items-center justify-between mb-2">
                 <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">MTD Analytics</span>
-                <span class="text-[9px] text-slate-600 font-bold">V1.08</span>
+                <span class="text-[9px] text-slate-600 font-bold">V1.12</span>
                 <h1 id="ui-display-branch" class="text-sm font-black font-jakarta text-white tracking-tight hidden">Sales Daily Report</h1>
             </div>
             <div id="dashboard-filter-container" class="grid grid-cols-2 gap-2">
@@ -1163,6 +1270,36 @@
                     </table>
                 </div>
             </div>
+            <!-- ── ANALYSIS SECTION ── -->
+            <div id="exec-analysis" class="hidden space-y-3">
+                <!-- Day of Week Analysis -->
+                <div class="glass-card rounded-[2rem] p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">📅 วิเคราะห์รายวัน</span>
+                        <div class="flex gap-3 text-right">
+                            <div>
+                                <p class="text-[8px] text-slate-500 uppercase tracking-wider">ขายดีสุด</p>
+                                <p id="day-best" class="text-[11px] font-black text-emerald-300">—</p>
+                            </div>
+                            <div>
+                                <p class="text-[8px] text-slate-500 uppercase tracking-wider">ขายน้อยสุด</p>
+                                <p id="day-worst" class="text-[11px] font-black text-rose-300">—</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="day-analysis-bars" class="space-y-2.5"></div>
+                </div>
+
+                <!-- Decade Analysis -->
+                <div class="glass-card rounded-[2rem] p-5">
+                    <div class="flex items-center mb-4">
+                        <span class="section-tag bg-amber-500/10 text-amber-300 border border-amber-500/20">📊 วิเคราะห์ช่วง 10 วัน</span>
+                    </div>
+                    <div id="decade-analysis-bars" class="space-y-2.5"></div>
+                </div>
+            </div>
+            <!-- ── END ANALYSIS SECTION ── -->
+
             <!-- ── END EXECUTIVE SECTION ── -->
 
             <!-- Admin: Clear Data (Overall only) -->
