@@ -51,6 +51,8 @@
         let shareChart = null;
         let weeklyChart = null;
         let allBranchesChart = null;
+        let msWeekChart = null;
+        let msWeekOverallChart = null;
         let selectedBranch = "";
         let currentMode = "entry";
         let currentBranchStats = []; // เก็บข้อมูลล่าสุดสำหรับ Export
@@ -281,8 +283,10 @@
                 document.getElementById('exec-branch-compare').classList.remove('hidden');
                 document.getElementById('exec-data-table').classList.remove('hidden');
                 document.getElementById('exec-analysis').classList.remove('hidden');
+                document.getElementById('exec-ms-trend').classList.remove('hidden');
                 document.getElementById('branch-weekly-stats').classList.add('hidden');
                 document.getElementById('branch-manpower-stats').classList.add('hidden');
+                document.getElementById('branch-ms-trend').classList.add('hidden');
 
                 const branchStats = [];
                 Object.keys(branchData).forEach(bName => {
@@ -309,12 +313,17 @@
                 renderDataTable(branchStats);
                 renderDayAnalysis(weekDaysSales);
                 renderDecadeAnalysis(sortedMonthDocs, currentYear, currentMonth);
+                const msOverallData = calcWeeklyMS(allDocs, '', currentYear, currentMonth);
+                msMultiOverall = calcWeeklyMSMulti(allDocs, '', currentYear, currentMonth);
+                msWeekOverallChart = renderMsWeekMulti('msWeekOverallChart', msWeekOverallChart, msMultiOverall, msModeOverall);
             } else {
                 document.getElementById('exec-leaderboard').classList.add('hidden');
                 document.getElementById('exec-branch-compare').classList.add('hidden');
                 document.getElementById('exec-data-table').classList.add('hidden');
                 document.getElementById('exec-analysis').classList.add('hidden');
+                document.getElementById('exec-ms-trend').classList.add('hidden');
                 document.getElementById('branch-weekly-stats').classList.remove('hidden');
+                document.getElementById('branch-ms-trend').classList.remove('hidden');
 
                 if (selectedBranch && latestByBranch[selectedBranch]) {
                     document.getElementById('ui-branch-pc-regular').innerText = latestByBranch[selectedBranch].pcRegular || 0;
@@ -325,7 +334,251 @@
                 }
                 document.getElementById('branch-manpower-stats').classList.remove('hidden');
                 renderWeeklyChart(weekDaysSales);
+                const msBranchData = calcWeeklyMS(allDocs, selectedBranch, currentYear, currentMonth);
+                msMultiBranch = calcWeeklyMSMulti(allDocs, selectedBranch, currentYear, currentMonth);
+                msWeekChart = renderMsWeekMulti('msWeekBranchChart', msWeekChart, msMultiBranch, msModeBranch);
             }
+        }
+
+        // คำนวณ MS% รายสัปดาห์จาก allDocs
+        function calcWeeklyMS(docs, branchName, year, month) {
+            const filtered = docs.filter(d => {
+                const dd = new Date(d.date);
+                return dd.getFullYear() === year && dd.getMonth() === month
+                    && (branchName === '' || d.branch === branchName);
+            }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const weekRanges = [[1,7],[8,14],[15,21],[22,31]];
+            const result = [];
+
+            weekRanges.forEach(([startDay, endDay]) => {
+                // ข้อมูลทั้งหมดตั้งแต่วันแรกถึงสิ้นสัปดาห์นี้ (cumulative actual)
+                const upToDocs = filtered.filter(d => new Date(d.date).getDate() <= endDay);
+                // ข้อมูลคู่แข่งเฉพาะที่กรอกในสัปดาห์นี้เท่านั้น
+                const thisWeekCompDocs = filtered.filter(d => {
+                    const day = new Date(d.date).getDate();
+                    return day >= startDay && day <= endDay
+                        && d.competitors
+                        && Object.values(d.competitors).reduce((s,v) => s + Number(v), 0) > 0;
+                });
+
+                // ถ้าไม่มีการกรอกคู่แข่งในสัปดาห์นี้ → ไม่แสดง
+                if (!thisWeekCompDocs.length || !upToDocs.length) { result.push(null); return; }
+
+                // ยอดขายล่าสุดต่อสาขา ณ สิ้นสัปดาห์
+                const latestActual = {};
+                upToDocs.forEach(d => {
+                    if (!latestActual[d.branch] || new Date(d.date) >= new Date(latestActual[d.branch].date)) {
+                        latestActual[d.branch] = d;
+                    }
+                });
+
+                // ข้อมูลคู่แข่งล่าสุดที่กรอกในสัปดาห์นี้ต่อสาขา
+                const latestComp = {};
+                thisWeekCompDocs.forEach(d => {
+                    if (!latestComp[d.branch] || new Date(d.date) >= new Date(latestComp[d.branch].date)) {
+                        latestComp[d.branch] = d;
+                    }
+                });
+
+                let ourTotal = Object.values(latestActual).reduce((s, d) => s + Number(d.actual), 0);
+                let compTotal = Object.values(latestComp).reduce((s, d) => {
+                    return s + Object.values(d.competitors).reduce((x, v) => x + Number(v), 0);
+                }, 0);
+
+                const ms = (ourTotal + compTotal) > 0 ? (ourTotal / (ourTotal + compTotal)) * 100 : null;
+                result.push(ms);
+            });
+            return result;
+        }
+
+        // state สำหรับ toggle
+        let msModeOverall = 'beger';
+        let msModeBranch  = 'beger';
+        let msMultiOverall = {};
+        let msMultiBranch  = {};
+
+        window.setMsMode = (scope, mode) => {
+            if (scope === 'overall') {
+                msModeOverall = mode;
+                document.getElementById('ms-overall-beger-btn').style.background = mode === 'beger' ? 'rgba(29,78,216,0.3)' : '';
+                document.getElementById('ms-overall-beger-btn').style.borderColor = mode === 'beger' ? 'rgba(96,165,250,0.5)' : 'rgba(255,255,255,0.1)';
+                document.getElementById('ms-overall-beger-btn').style.color = mode === 'beger' ? '#60a5fa' : '#64748b';
+                document.getElementById('ms-overall-all-btn').style.background = mode === 'all' ? 'rgba(29,78,216,0.3)' : '';
+                document.getElementById('ms-overall-all-btn').style.borderColor = mode === 'all' ? 'rgba(96,165,250,0.5)' : 'rgba(255,255,255,0.1)';
+                document.getElementById('ms-overall-all-btn').style.color = mode === 'all' ? '#60a5fa' : '#64748b';
+                msWeekOverallChart = renderMsWeekMulti('msWeekOverallChart', msWeekOverallChart, msMultiOverall, mode);
+            } else {
+                msModeBranch = mode;
+                document.getElementById('ms-branch-beger-btn').style.background = mode === 'beger' ? 'rgba(29,78,216,0.3)' : '';
+                document.getElementById('ms-branch-beger-btn').style.borderColor = mode === 'beger' ? 'rgba(96,165,250,0.5)' : 'rgba(255,255,255,0.1)';
+                document.getElementById('ms-branch-beger-btn').style.color = mode === 'beger' ? '#60a5fa' : '#64748b';
+                document.getElementById('ms-branch-all-btn').style.background = mode === 'all' ? 'rgba(29,78,216,0.3)' : '';
+                document.getElementById('ms-branch-all-btn').style.borderColor = mode === 'all' ? 'rgba(96,165,250,0.5)' : 'rgba(255,255,255,0.1)';
+                document.getElementById('ms-branch-all-btn').style.color = mode === 'all' ? '#60a5fa' : '#64748b';
+                msWeekChart = renderMsWeekMulti('msWeekBranchChart', msWeekChart, msMultiBranch, mode);
+            }
+        };
+
+        // คำนวณ MS% รายสัปดาห์ต่อแบรนด์
+        function calcWeeklyMSMulti(docs, branchName, year, month) {
+            const filtered = docs.filter(d => {
+                const dd = new Date(d.date);
+                return dd.getFullYear() === year && dd.getMonth() === month
+                    && (branchName === '' || d.branch === branchName);
+            }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const weekRanges = [[1,7],[8,14],[15,21],[22,31]];
+            const brandWeeks = { 'Beger': [] }; // Beger + คู่แข่ง
+
+            weekRanges.forEach(([startDay, endDay]) => {
+                const upToDocs = filtered.filter(d => new Date(d.date).getDate() <= endDay);
+                const thisWeekCompDocs = filtered.filter(d => {
+                    const day = new Date(d.date).getDate();
+                    return day >= startDay && day <= endDay
+                        && d.competitors
+                        && Object.values(d.competitors).reduce((s,v) => s + Number(v), 0) > 0;
+                });
+
+                if (!thisWeekCompDocs.length || !upToDocs.length) {
+                    // ไม่มีข้อมูล → null ทุกแบรนด์
+                    brandWeeks['Beger'].push(null);
+                    return;
+                }
+
+                // ยอด Beger ล่าสุด
+                const latestActual = {};
+                upToDocs.forEach(d => {
+                    if (!latestActual[d.branch] || new Date(d.date) >= new Date(latestActual[d.branch].date))
+                        latestActual[d.branch] = d;
+                });
+                const ourTotal = Object.values(latestActual).reduce((s, d) => s + Number(d.actual), 0);
+
+                // ยอดคู่แข่งต่อแบรนด์ ล่าสุดในสัปดาห์นี้
+                const compByBrand = {};
+                const latestComp = {};
+                thisWeekCompDocs.forEach(d => {
+                    if (!latestComp[d.branch] || new Date(d.date) >= new Date(latestComp[d.branch].date))
+                        latestComp[d.branch] = d;
+                });
+                Object.values(latestComp).forEach(d => {
+                    Object.entries(d.competitors).forEach(([brand, val]) => {
+                        compByBrand[brand] = (compByBrand[brand] || 0) + Number(val);
+                    });
+                });
+
+                const totalMarket = ourTotal + Object.values(compByBrand).reduce((s,v) => s+v, 0);
+                if (totalMarket === 0) { brandWeeks['Beger'].push(null); return; }
+
+                brandWeeks['Beger'].push((ourTotal / totalMarket) * 100);
+
+                Object.entries(compByBrand).forEach(([brand, val]) => {
+                    if (!brandWeeks[brand]) brandWeeks[brand] = weekRanges.map(() => null);
+                    const wkIdx = weekRanges.findIndex(([s,e]) => startDay === s);
+                    brandWeeks[brand][wkIdx] = (val / totalMarket) * 100;
+                });
+            });
+
+            // เติม null สำหรับ week ที่ขาดในแบรนด์คู่แข่ง
+            Object.keys(brandWeeks).forEach(b => {
+                while (brandWeeks[b].length < 4) brandWeeks[b].push(null);
+            });
+
+            return brandWeeks;
+        }
+
+        // render multi-brand chart
+        function renderMsWeekMulti(canvasId, chartRef, multiBrandData, mode) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return chartRef;
+            if (chartRef) chartRef.destroy();
+
+            if (!multiBrandData || !multiBrandData['Beger']) {
+                ctx.style.display = 'none';
+                return null;
+            }
+
+            ctx.style.display = '';
+            const noDataEl = ctx.parentElement.querySelector('.ms-no-data');
+            if (noDataEl) noDataEl.remove();
+
+            const allLabels = ['Week 1\n(1-7)', 'Week 2\n(8-14)', 'Week 3\n(15-21)', 'Week 4\n(22-31)'];
+            const begerData = multiBrandData['Beger'];
+
+            // หา week ที่มีข้อมูล
+            const hasDataWeeks = begerData.map((v, i) => v !== null ? i : -1).filter(i => i >= 0);
+            if (hasDataWeeks.length === 0) {
+                ctx.style.display = 'none';
+                return null;
+            }
+
+            const filteredLabels = hasDataWeeks.map(i => allLabels[i]);
+
+            // สีคู่แข่ง
+            const compColors = ['#94a3b8','#64748b','#475569','#6b7280','#9ca3af','#cbd5e1','#e2e8f0','#a1a1aa','#71717a'];
+
+            let datasets = [];
+            if (mode === 'beger') {
+                const fd = hasDataWeeks.map(i => begerData[i]);
+                const avg = fd.filter(v=>v!==null).reduce((a,b)=>a+b,0) / fd.filter(v=>v!==null).length;
+                const grad = ctx.getContext('2d').createLinearGradient(0,0,0,130);
+                grad.addColorStop(0,'rgba(96,165,250,0.3)');
+                grad.addColorStop(1,'rgba(96,165,250,0)');
+                datasets = [
+                    { label: 'Beger', data: fd, borderColor: '#60a5fa', backgroundColor: grad, fill: true,
+                      tension: 0.4, borderWidth: 2.5, pointRadius: 5,
+                      pointBackgroundColor: fd.map((v,i) => i===0?'#60a5fa': v>fd[i-1]?'#34d399':v<fd[i-1]?'#f87171':'#60a5fa'),
+                      pointBorderColor:'#1e3a8a', pointBorderWidth:1.5 },
+                    { label:'เฉลี่ย', data: fd.map(()=>avg), borderColor:'rgba(251,191,36,0.5)', borderWidth:1,
+                      borderDash:[4,4], pointRadius:0, fill:false, datalabels:{display:false} }
+                ];
+            } else {
+                // all mode — กรองเฉพาะแบรนด์ที่ MS% > 10% ในอย่างน้อย 1 สัปดาห์
+                let ci = 0;
+                Object.entries(multiBrandData).forEach(([brand, weekData]) => {
+                    const fd = hasDataWeeks.map(i => weekData[i] !== undefined ? weekData[i] : null);
+                    const maxVal = Math.max(...fd.filter(v=>v!==null));
+                    if (maxVal < 10) return; // ซ่อนแบรนด์ที่ < 10%
+                    const isBeger = brand === 'Beger';
+                    const color = isBeger ? '#60a5fa' : compColors[ci++ % compColors.length];
+                    const grad = ctx.getContext('2d').createLinearGradient(0,0,0,130);
+                    if (isBeger) { grad.addColorStop(0,'rgba(96,165,250,0.2)'); grad.addColorStop(1,'rgba(96,165,250,0)'); }
+                    datasets.push({
+                        label: brand, data: fd,
+                        borderColor: color, backgroundColor: isBeger ? grad : 'transparent',
+                        fill: isBeger, tension: 0.4,
+                        borderWidth: isBeger ? 2.5 : 1.5,
+                        borderDash: isBeger ? [] : [4,3],
+                        pointRadius: fd.map(v => v!==null?4:0),
+                        pointBackgroundColor: color, pointBorderColor: '#0a0f1e', pointBorderWidth:1,
+                        spanGaps: false
+                    });
+                });
+            }
+
+            return new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: { labels: filteredLabels, datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: mode === 'all', position: 'bottom',
+                            labels: { color:'#94a3b8', font:{size:9,family:'Sarabun'}, padding:8, boxWidth:20 } },
+                        datalabels: {
+                            display: (ctx) => mode === 'beger' && ctx.datasetIndex === 0,
+                            color:'#e2e8f0', font:{size:10,weight:'bold'},
+                            align:'top', anchor:'top', offset:4,
+                            formatter: v => v!==null ? v.toFixed(1)+'%' : ''
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: false, grid:{color:'rgba(255,255,255,0.05)'},
+                             ticks:{color:'#64748b',font:{size:9},callback:v=>v.toFixed(0)+'%'} },
+                        x: { grid:{display:false}, ticks:{color:'#94a3b8',font:{size:9}} }
+                    },
+                    layout: { padding: { top: mode==='beger'?20:8 } }
+                }
+            });
         }
 
         function renderDayAnalysis(weekSales) {
@@ -639,6 +892,16 @@
         window.exportToExcel = async () => {
             if (!currentBranchStats.length) { showErrorMessage("ไม่มีข้อมูลสำหรับ Export"); return; }
 
+            // คำนวณ MS% รายสัปดาห์ต่อสาขา
+            const selectedMonthStr = dashboardMonthFilter.value;
+            const [yearStr, monthStr] = selectedMonthStr.split('-');
+            const expYear = parseInt(yearStr);
+            const expMonth = parseInt(monthStr) - 1;
+            const weekMsPerBranch = {};
+            Object.keys(branchData).forEach(bName => {
+                weekMsPerBranch[bName] = calcWeeklyMS(allDocs, bName, expYear, expMonth);
+            });
+
             const wb = new ExcelJS.Workbook();
             wb.creator = 'Sales Daily Report';
             const ws = wb.addWorksheet('Sales Overview', { views: [{ state: 'frozen', ySplit: 1 }] });
@@ -646,33 +909,39 @@
             // ---- Column definitions ----
             ws.columns = [
                 { key: 'name',        width: 20 },
-                { key: 'pcRegular',   width: 12 },
-                { key: 'pcPromo',     width: 12 },
-                { key: 'actual',      width: 18 },
-                { key: 'target',      width: 18 },
-                { key: 'ach',         width: 12 },
-                { key: 'forecast',    width: 20 },
-                { key: 'forecastAch', width: 14 },
-                { key: 'ms',          width: 12 },
+                { key: 'pcRegular',   width: 10 },
+                { key: 'pcPromo',     width: 10 },
+                { key: 'actual',      width: 16 },
+                { key: 'target',      width: 16 },
+                { key: 'ach',         width: 11 },
+                { key: 'forecast',    width: 18 },
+                { key: 'forecastAch', width: 12 },
+                { key: 'ms',          width: 10 },
+                { key: 'ms_w1',       width: 11 },
+                { key: 'ms_w2',       width: 11 },
+                { key: 'ms_w3',       width: 11 },
+                { key: 'ms_w4',       width: 11 },
             ];
 
             // ---- Header row ----
-            const headers = ['สาขา','PC ประจำ','Promo','ยอดขาย (฿)','เป้าหมาย (฿)','% Ach','คาดการณ์สิ้นเดือน','คาดการณ์ %','MS%'];
+            const headers = ['สาขา','PC ประจำ','Promo','ยอดขาย (฿)','เป้าหมาย (฿)','% Ach','คาดการณ์สิ้นเดือน','คาดการณ์ %','MS%','MS% W1','MS% W2','MS% W3','MS% W4'];
             const headerRow = ws.addRow(headers);
             headerRow.height = 32;
             headerRow.eachCell((cell, col) => {
-                // Gradient-ish: deep blue header
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1e3a8a' } };
-                cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'TH SarabunPSK' };
+                const isWeek = col >= 10;
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isWeek ? 'FF0f3460' : 'FF1e3a8a' } };
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: isWeek ? 10 : 11, name: 'TH SarabunPSK' };
                 cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
                 cell.border = {
-                    bottom: { style: 'medium', color: { argb: 'FF7C3AED' } },
+                    bottom: { style: 'medium', color: { argb: 'FF1e40af' } },
                     right: { style: 'thin', color: { argb: 'FF1e40af' } }
                 };
             });
 
             // ---- Data rows ----
             currentBranchStats.forEach((s, idx) => {
+                const fullName = 'DH ' + s.name;
+                const weekMs = weekMsPerBranch[fullName] || [null, null, null, null];
                 const row = ws.addRow([
                     s.name,
                     s.pcRegular,
@@ -683,27 +952,31 @@
                     s.forecast,
                     s.forecastAch / 100,
                     s.ms / 100,
+                    weekMs[0] !== null ? weekMs[0] / 100 : '',
+                    weekMs[1] !== null ? weekMs[1] / 100 : '',
+                    weekMs[2] !== null ? weekMs[2] / 100 : '',
+                    weekMs[3] !== null ? weekMs[3] / 100 : '',
                 ]);
                 row.height = 22;
 
-                // Zebra stripe
                 const bg = idx % 2 === 0 ? 'FFF0F4FF' : 'FFE0E8FF';
+                const bgWeek = idx % 2 === 0 ? 'FFe8f0ff' : 'FFd4e2ff';
                 row.eachCell((cell, col) => {
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col >= 10 ? bgWeek : bg } };
                     cell.font = { size: 10, name: 'TH SarabunPSK' };
                     cell.alignment = { vertical: 'middle', horizontal: col === 1 ? 'left' : 'right' };
                     cell.border = { bottom: { style: 'thin', color: { argb: 'FFB6C8EE' } } };
                 });
 
-                // Number formats
                 row.getCell(4).numFmt = '#,##0';
                 row.getCell(5).numFmt = '#,##0';
                 row.getCell(7).numFmt = '#,##0';
                 row.getCell(6).numFmt = '0.0%';
                 row.getCell(8).numFmt = '0.0%';
                 row.getCell(9).numFmt = '0.0%';
+                [10,11,12,13].forEach(c => { if (row.getCell(c).value !== '') row.getCell(c).numFmt = '0.0%'; });
 
-                // Color % Ach cell
+                // Color % Ach
                 const achVal = s.ach;
                 const achColor = achVal >= 100 ? 'FF065F46' : achVal >= 70 ? 'FF78350F' : 'FF7F1D1D';
                 const achBg   = achVal >= 100 ? 'FFD1FAE5' : achVal >= 70 ? 'FFFEF3C7' : 'FFFEE2E2';
@@ -713,44 +986,33 @@
             });
 
             // ---- Total row ----
-            const n = currentBranchStats.length;
+            const totalActual   = currentBranchStats.reduce((s, d) => s + d.actual, 0);
+            const totalTarget   = currentBranchStats.reduce((s, d) => s + d.target, 0);
+            const totalForecast = currentBranchStats.reduce((s, d) => s + d.forecast, 0);
+            const totalCompSales = currentBranchStats.reduce((s, d) => {
+                const comp = d.ms > 0 ? d.actual * (100 / d.ms - 1) : 0;
+                return s + comp;
+            }, 0);
+            const overallAch   = totalTarget > 0 ? totalActual / totalTarget : 0;
+            const overallFcAch = totalTarget > 0 ? totalForecast / totalTarget : 0;
+            const overallMs    = (totalActual + totalCompSales) > 0 ? totalActual / (totalActual + totalCompSales) : 0;
+
             const totalRow = ws.addRow([
                 'รวมทั้งหมด',
                 currentBranchStats.reduce((s, d) => s + d.pcRegular, 0),
                 currentBranchStats.reduce((s, d) => s + d.pcPromo, 0),
-                currentBranchStats.reduce((s, d) => s + d.actual, 0),
-                currentBranchStats.reduce((s, d) => s + d.target, 0),
-                '', // % Ach รวมคำนวณด้านล่าง
-                currentBranchStats.reduce((s, d) => s + d.forecast, 0),
-                '',
-                '',
+                totalActual, totalTarget, '', totalForecast, '', '', '', '', '', ''
             ]);
-
-            // Overall Ach
-            const totalActual   = currentBranchStats.reduce((s, d) => s + d.actual, 0);
-            const totalTarget   = currentBranchStats.reduce((s, d) => s + d.target, 0);
-            const totalForecast = currentBranchStats.reduce((s, d) => s + d.forecast, 0);
-            const totalMs       = currentBranchStats.reduce((s, d) => s + d.actual, 0);
-            const totalCompSales = currentBranchStats.reduce((s, d) => {
-                // ms = actual / (actual + comp) => comp = actual * (1/ms - 1)
-                const comp = d.ms > 0 ? d.actual * (100 / d.ms - 1) : 0;
-                return s + comp;
-            }, 0);
-
-            const overallAch      = totalTarget > 0 ? totalActual / totalTarget : 0;
-            const overallFcAch    = totalTarget > 0 ? totalForecast / totalTarget : 0;
-            const overallMs       = (totalActual + totalCompSales) > 0 ? totalActual / (totalActual + totalCompSales) : 0;
-
-            totalRow.getCell(6).value = overallAch;       totalRow.getCell(6).numFmt = '0.0%';
-            totalRow.getCell(8).value = overallFcAch;     totalRow.getCell(8).numFmt = '0.0%';
-            totalRow.getCell(9).value = overallMs;        totalRow.getCell(9).numFmt = '0.0%';
+            totalRow.getCell(6).value = overallAch;    totalRow.getCell(6).numFmt = '0.0%';
+            totalRow.getCell(8).value = overallFcAch;  totalRow.getCell(8).numFmt = '0.0%';
+            totalRow.getCell(9).value = overallMs;     totalRow.getCell(9).numFmt = '0.0%';
 
             totalRow.height = 28;
             totalRow.eachCell((cell, col) => {
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172554' } };
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'TH SarabunPSK' };
                 cell.alignment = { vertical: 'middle', horizontal: col === 1 ? 'left' : 'right' };
-                cell.border = { top: { style: 'medium', color: { argb: 'FF7C3AED' } } };
+                cell.border = { top: { style: 'medium', color: { argb: 'FF1e40af' } } };
             });
             totalRow.getCell(4).numFmt = '#,##0';
             totalRow.getCell(5).numFmt = '#,##0';
@@ -768,6 +1030,43 @@
         };
 
         // --- Clear All Data ---
+        window.confirmClearBranch = () => {
+            // populate branch select
+            const sel = document.getElementById('delete-branch-select');
+            sel.innerHTML = '<option value="" disabled selected>เลือกสาขา...</option>';
+            Object.keys(branchData).sort().forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name; opt.textContent = name;
+                sel.appendChild(opt);
+            });
+            document.getElementById('branch-pin').value = '';
+            document.getElementById('branch-pin-error').classList.add('hidden');
+            document.getElementById('confirm-branch-modal').classList.remove('hidden');
+        };
+        window.cancelClearBranch = () => {
+            document.getElementById('confirm-branch-modal').classList.add('hidden');
+        };
+        window.clearBranchData = async () => {
+            const branch = document.getElementById('delete-branch-select').value;
+            const pin = document.getElementById('branch-pin').value;
+            if (!branch || pin !== '111') {
+                document.getElementById('branch-pin-error').classList.remove('hidden');
+                document.getElementById('branch-pin').value = '';
+                return;
+            }
+            document.getElementById('confirm-branch-modal').classList.add('hidden');
+            try {
+                const snapshot = await getDocs(salesCol);
+                const deletes = snapshot.docs
+                    .filter(d => d.data().branch === branch)
+                    .map(d => deleteDoc(doc(db, 'sales', d.id)));
+                await Promise.all(deletes);
+                showErrorMessage(`✅ ลบข้อมูลสาขา ${branch.replace('DH ','')} เรียบร้อยแล้ว`);
+            } catch(err) {
+                showErrorMessage("❌ ลบไม่สำเร็จ: " + err.message);
+            }
+        };
+
         window.confirmClearData = () => {
             document.getElementById('clear-pin').value = '';
             document.getElementById('pin-error').classList.add('hidden');
@@ -1128,7 +1427,7 @@
                         <h1 class="text-2xl font-black font-jakarta text-white tracking-tight leading-tight">Sales Daily Report</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <p class="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em]">รายงานยอดสะสม MTD</p>
-                            <span class="text-[9px] text-slate-600 font-bold">V1.17</span>
+                            <span class="text-[9px] text-slate-600 font-bold">V1.30</span>
                         </div>
                     </div>
                 </div>
@@ -1238,7 +1537,7 @@
         <header class="header-glass px-4 pt-3 pb-3 sticky top-0 z-10">
             <div class="flex items-center justify-between mb-2">
                 <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">MTD Analytics</span>
-                <span class="text-[9px] text-slate-600 font-bold">V1.17</span>
+                <span class="text-[9px] text-slate-600 font-bold">V1.30</span>
                 <h1 id="ui-display-branch" class="text-sm font-black font-jakarta text-white tracking-tight hidden">Sales Daily Report</h1>
             </div>
             <div id="dashboard-filter-container" class="grid grid-cols-2 gap-2">
@@ -1354,17 +1653,40 @@
             </div>
             <!-- ── END ANALYSIS SECTION ── -->
 
+            <!-- MS% Weekly Trend - Overall -->
+            <div id="exec-ms-trend" class="hidden glass-card rounded-[2rem] p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">📈 แนวโน้ม MS% รายสัปดาห์ (ภาพรวม)</span>
+                    <div class="flex gap-1">
+                        <button id="ms-overall-beger-btn" onclick="setMsMode('overall','beger')"
+                            class="text-[9px] font-black px-2.5 py-1 rounded-lg transition-all"
+                            style="background:rgba(29,78,216,0.3);border:1px solid rgba(96,165,250,0.5);color:#60a5fa;">Beger</button>
+                        <button id="ms-overall-all-btn" onclick="setMsMode('overall','all')"
+                            class="text-[9px] font-black px-2.5 py-1 rounded-lg transition-all text-slate-500"
+                            style="border:1px solid rgba(255,255,255,0.1);">ทั้งหมด</button>
+                    </div>
+                </div>
+                <div class="h-48"><canvas id="msWeekOverallChart"></canvas></div>
+            </div>
+
             <!-- ── END EXECUTIVE SECTION ── -->
 
             <!-- Admin: Clear Data (Overall only) -->
             <div id="admin-clear-section" class="hidden text-center pb-2">
-                <button onclick="confirmClearData()" class="text-[10px] text-slate-400 font-bold hover:text-rose-400 transition-colors flex items-center gap-1 mx-auto">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    ล้างข้อมูลทั้งหมด
-                </button>
+                <div class="flex items-center justify-center gap-4">
+                    <button onclick="confirmClearData()" class="text-[10px] text-slate-400 font-bold hover:text-rose-400 transition-colors flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        ล้างข้อมูลทั้งหมด
+                    </button>
+                    <span class="text-slate-700 text-[10px]">|</span>
+                    <button onclick="confirmClearBranch()" class="text-[10px] text-slate-400 font-bold hover:text-amber-400 transition-colors flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        ลบเฉพาะสาขา
+                    </button>
+                </div>
             </div>
 
-            <!-- Confirm Modal -->
+            <!-- Confirm Modal (ลบทั้งหมด) -->
             <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-6" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);">
                 <div class="glass-card rounded-[2rem] p-7 w-full max-w-sm space-y-5 text-center">
                     <div class="text-4xl">🔐</div>
@@ -1376,6 +1698,24 @@
                     <div class="flex gap-3">
                         <button onclick="cancelClear()" class="btn-secondary flex-1 text-slate-300 font-bold py-3.5 rounded-2xl text-sm">ยกเลิก</button>
                         <button onclick="clearAllData()" id="clear-data-btn" class="flex-1 font-black py-3.5 rounded-2xl text-sm text-white" style="background:linear-gradient(135deg,#dc2626,#b91c1c);box-shadow:0 4px 20px rgba(220,38,38,0.4);">ลบทั้งหมด</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal ลบเฉพาะสาขา -->
+            <div id="confirm-branch-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-6" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);">
+                <div class="glass-card rounded-[2rem] p-7 w-full max-w-sm space-y-4 text-center">
+                    <div class="text-4xl">🏢</div>
+                    <h2 class="text-xl font-black font-jakarta text-white">ลบข้อมูลเฉพาะสาขา</h2>
+                    <select id="delete-branch-select" class="w-full p-3.5 glass-input rounded-2xl outline-none font-bold text-white text-center text-sm">
+                        <option value="" disabled selected>เลือกสาขา...</option>
+                    </select>
+                    <input id="branch-pin" type="password" maxlength="6" placeholder="••• รหัสผ่าน" inputmode="numeric"
+                        class="w-full p-4 glass-input rounded-2xl outline-none font-black text-2xl text-white text-center tracking-[0.5em]">
+                    <p id="branch-pin-error" class="hidden text-rose-400 text-xs font-bold">รหัสไม่ถูกต้อง หรือ ยังไม่ได้เลือกสาขา</p>
+                    <div class="flex gap-3">
+                        <button onclick="cancelClearBranch()" class="btn-secondary flex-1 text-slate-300 font-bold py-3.5 rounded-2xl text-sm">ยกเลิก</button>
+                        <button onclick="clearBranchData()" class="flex-1 font-black py-3.5 rounded-2xl text-sm text-white" style="background:linear-gradient(135deg,#d97706,#b45309);box-shadow:0 4px 20px rgba(217,119,6,0.4);">ลบสาขานี้</button>
                     </div>
                 </div>
             </div>
@@ -1395,6 +1735,22 @@
             <div id="branch-weekly-stats" class="glass-card rounded-[2rem] p-5">
                 <p class="card-label mb-4">ยอดขายตามวันในสัปดาห์</p>
                 <div class="h-44"><canvas id="weeklyChart"></canvas></div>
+            </div>
+
+            <!-- MS% Weekly Trend - Branch -->
+            <div id="branch-ms-trend" class="glass-card rounded-[2rem] p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="card-label text-blue-300">แนวโน้ม MS% รายสัปดาห์</p>
+                    <div class="flex gap-1">
+                        <button id="ms-branch-beger-btn" onclick="setMsMode('branch','beger')"
+                            class="text-[9px] font-black px-2.5 py-1 rounded-lg transition-all"
+                            style="background:rgba(29,78,216,0.3);border:1px solid rgba(96,165,250,0.5);color:#60a5fa;">Beger</button>
+                        <button id="ms-branch-all-btn" onclick="setMsMode('branch','all')"
+                            class="text-[9px] font-black px-2.5 py-1 rounded-lg transition-all text-slate-500"
+                            style="border:1px solid rgba(255,255,255,0.1);">ทั้งหมด</button>
+                    </div>
+                </div>
+                <div class="h-44"><canvas id="msWeekBranchChart"></canvas></div>
             </div>
             <!-- ── END BRANCH SECTION ── -->
 
