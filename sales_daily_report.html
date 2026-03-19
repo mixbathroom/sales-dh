@@ -862,6 +862,51 @@
         dateInput.addEventListener('change', checkSaturday);
         dateInput.valueAsDate = new Date();
         checkSaturday();
+
+        // --- Auto-fill PC fields from latest data ---
+        const pcRegularInput  = document.getElementById('pc-regular');
+        const pcPromoInput    = document.getElementById('pc-promo');
+        const pcHintEl        = document.getElementById('pc-hint');
+
+        function autoFillPC(branchName) {
+            if (!branchName) return;
+            const now = new Date();
+            const curYear  = now.getFullYear();
+            const curMonth = now.getMonth();
+
+            // หาข้อมูลล่าสุดของสาขานี้ในเดือนปัจจุบัน
+            const monthDocs = allDocs.filter(d => {
+                const dd = new Date(d.date);
+                return d.branch === branchName
+                    && dd.getFullYear() === curYear
+                    && dd.getMonth() === curMonth;
+            });
+
+            if (monthDocs.length === 0) {
+                // ยังไม่มีข้อมูลเดือนนี้ — บังคับกรอก
+                pcRegularInput.value = '';
+                pcPromoInput.value   = '';
+                pcRegularInput.required = true;
+                pcPromoInput.required   = true;
+                if (pcHintEl) pcHintEl.classList.add('hidden');
+            } else {
+                // มีข้อมูลแล้ว — เติมค่าล่าสุดให้
+                const latest = monthDocs.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                pcRegularInput.value = latest.pcRegular || '';
+                pcPromoInput.value   = latest.pcPromo   || '';
+                pcRegularInput.required = false;
+                pcPromoInput.required   = false;
+                if (pcHintEl) {
+                    pcHintEl.textContent = `✦ โหลดจากข้อมูลล่าสุด (${latest.date}) — แก้ไขได้`;
+                    pcHintEl.classList.remove('hidden');
+                }
+            }
+        }
+
+        branchSelect.addEventListener('change', (e) => {
+            autoFillPC(e.target.value);
+        });
+
     </script>
 
     <style>
@@ -1083,7 +1128,7 @@
                         <h1 class="text-2xl font-black font-jakarta text-white tracking-tight leading-tight">Sales Daily Report</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <p class="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em]">รายงานยอดสะสม MTD</p>
-                            <span class="text-[9px] text-slate-600 font-bold">V1.15</span>
+                            <span class="text-[9px] text-slate-600 font-bold">V1.17</span>
                         </div>
                     </div>
                 </div>
@@ -1138,8 +1183,9 @@
                                 style="font-family:'Plus Jakarta Sans',sans-serif;">
                         </div>
                     </div>
-
-                    <!-- Competitor Section -->
+                    <!-- PC Hint -->
+                    <div id="pc-hint" class="hidden text-center text-[10px] font-bold text-blue-400/70 -mt-1">
+                    </div>
                     <div id="competitor-section" class="hidden pt-5 border-t border-white/5">
                         <div class="flex items-center gap-2 mb-4">
                             <div class="w-1.5 h-4 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]"></div>
@@ -1192,7 +1238,7 @@
         <header class="header-glass px-4 pt-3 pb-3 sticky top-0 z-10">
             <div class="flex items-center justify-between mb-2">
                 <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">MTD Analytics</span>
-                <span class="text-[9px] text-slate-600 font-bold">V1.15</span>
+                <span class="text-[9px] text-slate-600 font-bold">V1.17</span>
                 <h1 id="ui-display-branch" class="text-sm font-black font-jakarta text-white tracking-tight hidden">Sales Daily Report</h1>
             </div>
             <div id="dashboard-filter-container" class="grid grid-cols-2 gap-2">
