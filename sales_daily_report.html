@@ -56,6 +56,7 @@
         let selectedBranch = "";
         let currentMode = "entry";
         let currentBranchStats = []; // เก็บข้อมูลล่าสุดสำหรับ Export
+        let msTargetsMap = {};
 
         // --- DOM Elements (must come before any usage) ---
         const branchSelect = document.getElementById('branch-select');
@@ -100,6 +101,26 @@
                 updateDashboard(currentMode === 'dashboard-overall' ? "" : selectedBranch);
             }
         }, (err) => console.error("Firestore error:", err));
+
+        // --- MS Targets Collection ---
+        const msTargetsCol = collection(db, 'msTargets');
+        onSnapshot(msTargetsCol, (snapshot) => {
+            msTargetsMap = {};
+            snapshot.docs.forEach(d => {
+                const data = d.data();
+                msTargetsMap[data.branch] = data;
+            });
+        }, (err) => console.error("msTargets error:", err));
+
+
+        const saveMsTarget = async (branch, minMs, enabled) => {
+            const docRef = doc(db, 'msTargets', branch.replace(/ /g,'_').replace(/[()/]/g,''));
+            await setDoc(docRef, { branch, minMs: parseFloat(minMs) || 0, enabled: !!enabled });
+        };
+        const deleteMsTarget = async (branch) => {
+            const docRef = doc(db, 'msTargets', branch.replace(/ /g,'_').replace(/[()/]/g,''));
+            await deleteDoc(docRef);
+        };
 
         const saveDoc = async (record) => {
             const docRef = doc(db, 'sales', record.id);
@@ -1150,6 +1171,10 @@
 
                 entryFormContainer.classList.add('hidden');
                 successView.classList.remove('hidden');
+
+                // --- คำนวณและแสดง Notification ---
+                showSaveNotification(branch, actual, date, competitors);
+
             } catch (err) {
                 showErrorMessage("ไม่สามารถบันทึกได้: " + err.message);
             } finally {
@@ -1157,6 +1182,236 @@
                 btn.innerHTML = '<span class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>ยืนยันบันทึกยอด</span>';
             }
         });
+
+        // ─── Notification Logic ────────────────────────────────────────────
+        function showSaveNotification(branch, actual, date, competitors) {
+            // คำนวณ Forecast%
+            const target = branchData[branch] || 0;
+            const now = new Date(date);
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            // หา todayDate (วันที่กรอก)
+            const todayDate = now.getDate();
+            const dailyAvg = todayDate > 0 ? actual / todayDate : 0;
+            const forecast = dailyAvg * daysInMonth;
+            const forecastPct = target > 0 ? (forecast / target) * 100 : 0;
+            const daysLeft = daysInMonth - todayDate;
+
+            // คำนวณ MS% — ใช้ข้อมูลเสาร์ล่าสุดเสมอ (ทั้งยอดเราและคู่แข่งมาจากวันเดียวกัน)
+            let msVal = null;
+            let msRefDate = null;
+            const isThisSaturday = new Date(date).getDay() === 6;
+            if (isThisSaturday && competitors && Object.keys(competitors).length > 0) {
+                // วันเสาร์นี้ — คำนวณจากข้อมูลที่กรอกตอนนี้
+                const compTotal = Object.values(competitors).reduce((a, b) => a + (Number(b) || 0), 0);
+                const totalMarket = actual + compTotal;
+                if (totalMarket > 0) { msVal = (actual / totalMarket) * 100; msRefDate = date; }
+            } else {
+                // วันอื่น — ดึง MS% จากวันเสาร์ล่าสุดของสาขานี้ (คำนวณจากข้อมูลของวันเสาร์นั้นเต็มๆ)
+                const branchDocs = allDocs
+                    .filter(d => d.branch === branch && d.date <= date && new Date(d.date).getDay() === 6)
+                    .sort((a, b) => b.date.localeCompare(a.date));
+                for (const d of branchDocs) {
+                    if (d.competitors && Object.keys(d.competitors).length > 0) {
+                        const comp = Object.values(d.competitors).reduce((a, b) => a + (Number(b) || 0), 0);
+                        const tot = Number(d.actual) + comp;
+                        if (tot > 0) { msVal = (Number(d.actual) / tot) * 100; msRefDate = d.date; }
+                        break;
+                    }
+                }
+            }
+
+            // สร้าง alerts
+            const alerts = [];
+
+            // ── Forecast Alert ──
+            let fcType, fcIcon, fcTitle, fcBody, fcTag;
+            if (forecastPct < 80) {
+                fcType = 'notif-red';
+                fcIcon = '⚠';
+                fcTitle = 'สาขาของท่านอยู่ในกลุ่มโฟกัสพิเศษ';
+                fcBody = 'กรุณาเร่งยอดขายโดยด่วน!';
+                fcTag = 'โฟกัสพิเศษ';
+            } else if (forecastPct < 95) {
+                fcType = 'notif-amber';
+                fcIcon = '↗';
+                fcTitle = 'เกือบถึงเป้าหมายแล้ว — สู้ต่อไป!';
+                fcBody = 'เพิ่มความพยายามในช่วงสุดท้าย!';
+                fcTag = 'ติดตามใกล้ชิด';
+            } else if (forecastPct < 100) {
+                fcType = 'notif-teal';
+                fcIcon = '◎';
+                fcTitle = 'ใกล้ถึงเป้าหมายแล้ว — ยังไม่ถึงเส้นชัย';
+                fcBody = 'ใกล้ถึงเส้นชัยแล้ว รักษาโมเมนตัมนี้ไว้!';
+                fcTag = 'ใกล้ถึงเป้า';
+            } else {
+                fcType = 'notif-green';
+                fcIcon = '★';
+                fcTitle = 'ยอดเยี่ยม! คาดว่าจะบรรลุเป้าหมายเดือนนี้';
+                fcBody = 'คาดการณ์ว่าจะทำยอดเกินเป้าหมาย รักษาฟอร์มนี้ไว้!';
+                fcTag = 'บรรลุเป้าแล้ว';
+            }
+            alerts.push(`
+                <div class="notif-card ${fcType}">
+                    <div class="notif-header">
+                        <div class="notif-icon-box">${fcIcon}</div>
+                        <div>
+                            <p class="notif-title">${fcTitle}</p>
+                            <p class="notif-sub">${branch} · ${date}</p>
+                        </div>
+                    </div>
+                    <p class="notif-alert-text">${fcBody}</p>
+                    <p class="notif-body-text">กรุณาดูแดชบอร์ดของท่าน</p>
+                    <div class="notif-footer-row">
+                        <span class="notif-tag-pill">${fcTag}</span>
+                    </div>
+                </div>
+            `);
+
+            // ── MS Alert (แจ้งทุกวัน ใช้ค่าจากเสาร์ล่าสุดเสมอ) ──
+            const msTarget = msTargetsMap[branch];
+            if (msVal !== null && msTarget && msTarget.enabled) {
+                const minMs = msTarget.minMs || 0;
+                const refLabel = msRefDate ? `อ้างอิงข้อมูล ${msRefDate}` : '';
+                let msType, msIcon, msTitle, msBody, msTag;
+                if (msVal < minMs) {
+                    msType = 'notif-red';
+                    msIcon = '◎';
+                    msTitle = `Market Share ${msVal.toFixed(1)}% ต่ำกว่าเป้า ${minMs.toFixed(1)}%`;
+                    msBody = 'กรุณาเร่งเพิ่ม Market Share โดยด่วน!';
+                    msTag = 'MS% ต่ำกว่าเป้า';
+                } else {
+                    msType = 'notif-green';
+                    msIcon = '◎';
+                    msTitle = `Market Share ${msVal.toFixed(1)}% ผ่านเกณฑ์ ${minMs.toFixed(1)}%`;
+                    msBody = 'Market Share ผ่านเกณฑ์ รักษาระดับนี้ไว้!';
+                    msTag = 'MS% ผ่านเกณฑ์';
+                }
+                alerts.push(`
+                    <div class="notif-card ${msType}">
+                        <div class="notif-header">
+                            <div class="notif-icon-box">${msIcon}</div>
+                            <div>
+                                <p class="notif-title">${msTitle}</p>
+                                <p class="notif-sub">${branch} · ${refLabel}</p>
+                            </div>
+                        </div>
+                        <p class="notif-alert-text">${msBody}</p>
+                        <p class="notif-body-text">กรุณาดูแดชบอร์ดของท่าน</p>
+                        <div class="notif-footer-row">
+                            <span class="notif-tag-pill">${msTag}</span>
+                        </div>
+                    </div>
+                `);
+            } else if (msVal === null && msTarget && msTarget.enabled) {
+                alerts.push(`
+                    <div class="notif-card notif-amber">
+                        <div class="notif-header">
+                            <div class="notif-icon-box">◎</div>
+                            <div>
+                                <p class="notif-title">ยังไม่มีข้อมูล Market Share</p>
+                                <p class="notif-sub">${branch}</p>
+                            </div>
+                        </div>
+                        <p class="notif-alert-text">กรุณากรอกข้อมูลคู่แข่งในวันเสาร์!</p>
+                        <p class="notif-body-text">ระบบจะคำนวณ MS% จากข้อมูลวันเสาร์</p>
+                        <div class="notif-footer-row">
+                            <span class="notif-tag-pill">รอข้อมูลเสาร์</span>
+                        </div>
+                    </div>
+                `);
+            }
+
+            // แสดง modal
+            document.getElementById('notif-modal-body').innerHTML = alerts.join('');
+            document.getElementById('notif-modal').classList.remove('hidden');
+        }
+
+        window.closeNotifModal = () => {
+            document.getElementById('notif-modal').classList.add('hidden');
+        };
+
+        // ─── MS Admin Settings ──────────────────────────────────────────────
+        window.openMsSettings = () => {
+            document.getElementById('ms-settings-modal').classList.remove('hidden');
+            renderMsSettingsTable();
+        };
+        window.closeMsSettings = () => {
+            document.getElementById('ms-settings-modal').classList.add('hidden');
+        };
+
+        function renderMsSettingsTable() {
+            const tbody = document.getElementById('ms-settings-tbody');
+            const branches = Object.keys(branchData).sort();
+            tbody.innerHTML = branches.map(b => {
+                const t = msTargetsMap[b];
+                const minMs = t ? t.minMs : '';
+                const enabled = t ? t.enabled : false;
+                const statusColor = (() => {
+                    if (!t || !t.enabled) return '#475569';
+                    // ดึง MS% ล่าสุดของสาขานี้
+                    const branchDocs = allDocs.filter(d => d.branch === b).sort((a,c)=>c.date.localeCompare(a.date));
+                    for (const d of branchDocs) {
+                        if (d.competitors && Object.keys(d.competitors).length > 0) {
+                            const comp = Object.values(d.competitors).reduce((x,y)=>x+(Number(y)||0),0);
+                            const tot = Number(d.actual)+comp;
+                            if (tot > 0) {
+                                const ms = (Number(d.actual)/tot)*100;
+                                if (ms < t.minMs) return '#f87171';
+                                return '#86efac';
+                            }
+                        }
+                    }
+                    return '#94a3b8';
+                })();
+                const statusText = (() => {
+                    if (!t || !t.enabled) return '—';
+                    const branchDocs = allDocs.filter(d => d.branch === b).sort((a,c)=>c.date.localeCompare(a.date));
+                    for (const d of branchDocs) {
+                        if (d.competitors && Object.keys(d.competitors).length > 0) {
+                            const comp = Object.values(d.competitors).reduce((x,y)=>x+(Number(y)||0),0);
+                            const tot = Number(d.actual)+comp;
+                            if (tot > 0) {
+                                const ms = (Number(d.actual)/tot)*100;
+                                return ms.toFixed(1)+'%';
+                            }
+                        }
+                    }
+                    return 'ไม่มีข้อมูล';
+                })();
+                return `<tr class="ms-row" data-branch="${b}">
+                    <td class="ms-td ms-branch-name">${b.replace('DH ','')}</td>
+                    <td class="ms-td" style="text-align:center">
+                        <input type="number" step="0.1" min="0" max="100" value="${minMs}" placeholder="—"
+                            class="ms-input" data-branch="${b}" onchange="onMsTargetChange(this)">
+                        <span style="font-size:11px;color:#94a3b8"> %</span>
+                    </td>
+                    <td class="ms-td" style="text-align:center">
+                        <label class="ms-toggle-label">
+                            <input type="checkbox" ${enabled?'checked':''} class="ms-toggle-cb" data-branch="${b}" onchange="onMsToggleChange(this)">
+                            <span class="ms-toggle-span"></span>
+                        </label>
+                    </td>
+                    <td class="ms-td" style="text-align:center;font-size:12px;font-weight:600;color:${statusColor}">${statusText}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        window.onMsTargetChange = async (input) => {
+            const branch = input.getAttribute('data-branch');
+            const row = input.closest('tr');
+            const cb = row.querySelector('.ms-toggle-cb');
+            await saveMsTarget(branch, input.value, cb.checked);
+        };
+        window.onMsToggleChange = async (cb) => {
+            const branch = cb.getAttribute('data-branch');
+            const row = cb.closest('tr');
+            const inp = row.querySelector('.ms-input');
+            await saveMsTarget(branch, inp.value, cb.checked);
+            renderMsSettingsTable();
+        };
 
         dateInput.addEventListener('change', checkSaturday);
         dateInput.valueAsDate = new Date();
@@ -1275,8 +1530,57 @@
             font-size: 9px; font-weight: 700; color: rgba(148,163,184,0.8);
             text-transform: uppercase; letter-spacing: 0.12em;
         }
+        /* ─── Notification Cards ─────────────────────────── */
+        .notif-card { border-radius:14px; padding:14px 16px 12px; border:1px solid; position:relative; overflow:hidden; margin-bottom:12px; }
+        .notif-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:14px 0 0 14px; }
+        .notif-red   { background:#2d1212; border-color:#7f1d1d; }
+        .notif-red::before { background:#ef4444; }
+        .notif-red .notif-title { color:#fca5a5; }
+        .notif-red .notif-icon-box { background:#7f1d1d; color:#fca5a5; }
+        .notif-red .notif-tag-pill { background:#7f1d1d; color:#fca5a5; }
+        .notif-red .notif-big { color:#fca5a5; }
+        .notif-amber { background:#2a1a06; border-color:#78350f; }
+        .notif-amber::before { background:#f59e0b; }
+        .notif-amber .notif-title { color:#fcd34d; }
+        .notif-amber .notif-icon-box { background:#78350f; color:#fcd34d; }
+        .notif-amber .notif-tag-pill { background:#78350f; color:#fcd34d; }
+        .notif-amber .notif-big { color:#fcd34d; }
+        .notif-teal  { background:#0c1f1e; border-color:#134e4a; }
+        .notif-teal::before { background:#14b8a6; }
+        .notif-teal .notif-title { color:#5eead4; }
+        .notif-teal .notif-icon-box { background:#134e4a; color:#5eead4; }
+        .notif-teal .notif-tag-pill { background:#134e4a; color:#5eead4; }
+        .notif-teal .notif-big { color:#5eead4; }
+        .notif-green { background:#0d2010; border-color:#14532d; }
+        .notif-green::before { background:#22c55e; }
+        .notif-green .notif-title { color:#86efac; }
+        .notif-green .notif-icon-box { background:#14532d; color:#86efac; }
+        .notif-green .notif-tag-pill { background:#14532d; color:#86efac; }
+        .notif-green .notif-big { color:#86efac; }
+        .notif-header { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+        .notif-icon-box { width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+        .notif-title { font-size:13px; font-weight:700; line-height:1.4; color:#e2e8f0; margin-bottom:1px; }
+        .notif-sub   { font-size:11px; color:#64748b; }
+        .notif-stats-row { display:flex; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+        .notif-stat-item { font-size:10px; color:#64748b; flex:1; min-width:60px; }
+        .notif-big   { font-size:15px; font-weight:700; display:block; font-family:'Plus Jakarta Sans',sans-serif; }
+        .notif-alert-text { font-size:17px; font-weight:800; line-height:1.4; color:#f1f5f9; margin-bottom:6px; font-family:'Plus Jakarta Sans',sans-serif; letter-spacing:-0.01em; }
+        .notif-body-text { font-size:11px; line-height:1.6; color:#64748b; margin-bottom:10px; }
+        .notif-footer-row { display:flex; align-items:center; justify-content:space-between; }
+        .notif-tag-pill { font-size:10px; font-weight:600; padding:2px 10px; border-radius:20px; }
+        /* ─── MS Settings Table ───────────────────────────── */
+        .ms-td { padding:8px 6px; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:middle; }
+        .ms-branch-name { font-size:12px; font-weight:600; color:#cbd5e1; }
+        .ms-input { width:58px; padding:4px 6px; font-size:12px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(255,255,255,0.05); color:#e2e8f0; text-align:center; outline:none; }
+        .ms-toggle-label { position:relative; display:inline-block; width:32px; height:18px; cursor:pointer; }
+        .ms-toggle-label input { opacity:0; width:0; height:0; }
+        .ms-toggle-span { position:absolute; inset:0; background:#374151; border-radius:9px; transition:.2s; }
+        .ms-toggle-span::after { content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:white; top:2px; left:2px; transition:.2s; }
+        .ms-toggle-label input:checked + .ms-toggle-span { background:#3b82f6; }
+        .ms-toggle-label input:checked + .ms-toggle-span::after { left:16px; }
+
         .card-value {
-            font-size: 22px; font-weight: 900;
+            font-size: 30px; font-weight: 900;
             font-family: 'Plus Jakarta Sans', sans-serif;
             color: #ffffff; line-height: 1; margin-top: 6px;
         }
@@ -1683,6 +1987,11 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
                         ลบเฉพาะสาขา
                     </button>
+                    <span class="text-slate-700 text-[10px]">|</span>
+                    <button onclick="openMsSettings()" class="text-[10px] text-blue-400 font-bold hover:text-blue-300 transition-colors flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                        ตั้งค่า MS% เป้าหมาย
+                    </button>
                 </div>
             </div>
 
@@ -1772,11 +2081,11 @@
                 <div class="flex justify-between items-end">
                     <div>
                         <p class="card-label mb-1.5">พยากรณ์ยอดรวม (บาท)</p>
-                        <div id="ui-forecast" class="text-lg font-black font-jakarta text-white">—</div>
+                        <div id="ui-forecast" class="text-2xl font-black font-jakarta text-white">—</div>
                     </div>
                     <div class="text-right">
                         <p class="card-label mb-1.5">พยากรณ์ Ach.</p>
-                        <div id="ui-forecast-ach" class="text-lg font-black font-jakarta text-amber-300">—</div>
+                        <div id="ui-forecast-ach" class="text-2xl font-black font-jakarta text-amber-300">—</div>
                     </div>
                 </div>
             </div>
@@ -1843,6 +2152,53 @@
             }
         };
         </script>
+    </div>
+
+
+    <!-- ═══ NOTIFICATION MODAL ═══ -->
+    <div id="notif-modal" class="hidden fixed inset-0 z-50 flex items-center justify-end px-0" style="background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);">
+        <div style="width:100%;max-width:420px;max-height:90vh;overflow-y:auto;margin:auto;padding:16px;">
+            <div class="glass-card rounded-[1.5rem] p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <p style="font-size:13px;font-weight:700;color:#e2e8f0;">ผลการวิเคราะห์หลังบันทึก</p>
+                    <button onclick="closeNotifModal()" style="color:#64748b;font-size:18px;line-height:1;background:none;border:none;cursor:pointer;">✕</button>
+                </div>
+                <div id="notif-modal-body"></div>
+                <div class="flex gap-3 mt-2">
+                    <button onclick="closeNotifModal(); continueEditing();" class="btn-secondary flex-1 text-slate-300 font-bold py-3 rounded-2xl text-sm">กรอกสาขาต่อ</button>
+                    <button onclick="closeNotifModal(); goToDashboard();" class="btn-primary flex-1 text-white font-bold py-3 rounded-2xl text-sm">ดูแดชบอร์ด</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ MS SETTINGS MODAL ═══ -->
+    <div id="ms-settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-4" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);">
+        <div style="width:100%;max-width:480px;max-height:88vh;overflow-y:auto;">
+            <div class="glass-card rounded-[1.5rem] p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p style="font-size:14px;font-weight:700;color:#e2e8f0;">เป้าหมาย Market Share รายสาขา</p>
+                        <p style="font-size:11px;color:#64748b;margin-top:2px;">ระบุ MS% ขั้นต่ำ · เปิด/ปิดแจ้งเตือนรายสาขา</p>
+                    </div>
+                    <button onclick="closeMsSettings()" style="color:#64748b;font-size:18px;background:none;border:none;cursor:pointer;">✕</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr>
+                                <th style="font-size:10px;font-weight:600;color:#64748b;text-align:left;padding:6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">สาขา</th>
+                                <th style="font-size:10px;font-weight:600;color:#64748b;text-align:center;padding:6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">MS% ขั้นต่ำ</th>
+                                <th style="font-size:10px;font-weight:600;color:#64748b;text-align:center;padding:6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">แจ้งเตือน</th>
+                                <th style="font-size:10px;font-weight:600;color:#64748b;text-align:center;padding:6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);">MS% ล่าสุด</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ms-settings-tbody"></tbody>
+                    </table>
+                </div>
+                <p style="font-size:10px;color:#475569;margin-top:12px;line-height:1.6;">* การเปลี่ยนแปลงบันทึกลง Firebase ทันที · สาขาที่ปิดแจ้งเตือนจะไม่แสดง MS alert</p>
+            </div>
+        </div>
     </div>
 
 </body>
