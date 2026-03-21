@@ -48,7 +48,7 @@
         // --- App State ---
         let allDocs = [];
         let salesChart = null;
-        let shareChart = null;
+        // shareChart replaced by table
         let weeklyChart = null;
         let allBranchesChart = null;
         let msWeekChart = null;
@@ -202,13 +202,20 @@
                 if (!latestByBranch[d.branch] || new Date(latestByBranch[d.branch].date) <= dDate) {
                     latestByBranch[d.branch] = d;
                 }
-                if (d.competitors) {
-                    Object.entries(d.competitors).forEach(([brand, amount]) => {
-                        marketMap[brand] = Math.max(marketMap[brand], Number(amount));
-                    });
-                }
                 if (!branchSpecificDocs[d.branch]) branchSpecificDocs[d.branch] = [];
                 branchSpecificDocs[d.branch].push(d);
+            });
+
+            // คำนวณยอดคู่แข่งจาก doc ล่าสุดของแต่ละสาขา (match กับยอดเรา)
+            const branchesToCount = selectedBranch
+                ? (latestByBranch[selectedBranch] ? [latestByBranch[selectedBranch]] : [])
+                : Object.values(latestByBranch);
+            branchesToCount.forEach(d => {
+                if (d.competitors) {
+                    Object.entries(d.competitors).forEach(([brand, amount]) => {
+                        marketMap[brand] = (marketMap[brand] || 0) + Number(amount);
+                    });
+                }
             });
 
             Object.keys(branchSpecificDocs).forEach(bName => {
@@ -554,12 +561,12 @@
                       borderDash:[4,4], pointRadius:0, fill:false, datalabels:{display:false} }
                 ];
             } else {
-                // all mode — กรองเฉพาะแบรนด์ที่ MS% > 10% ในอย่างน้อย 1 สัปดาห์
+                // all mode — กรองเฉพาะแบรนด์ที่ MS% > 5% ในอย่างน้อย 1 สัปดาห์
                 let ci = 0;
                 Object.entries(multiBrandData).forEach(([brand, weekData]) => {
                     const fd = hasDataWeeks.map(i => weekData[i] !== undefined ? weekData[i] : null);
                     const maxVal = Math.max(...fd.filter(v=>v!==null));
-                    if (maxVal < 10) return; // ซ่อนแบรนด์ที่ < 10%
+                    if (maxVal < 5) return; // ซ่อนแบรนด์ที่ < 5%
                     const isBeger = brand === 'Beger';
                     const color = isBeger ? '#60a5fa' : compColors[ci++ % compColors.length];
                     const grad = ctx.getContext('2d').createLinearGradient(0,0,0,130);
@@ -586,10 +593,10 @@
                         legend: { display: mode === 'all', position: 'bottom',
                             labels: { color:'#94a3b8', font:{size:9,family:'Sarabun'}, padding:8, boxWidth:20 } },
                         datalabels: {
-                            display: (ctx) => mode === 'beger' && ctx.datasetIndex === 0,
+                            display: (ctx) => ctx.datasetIndex === 0 || mode === 'all',
                             color:'#e2e8f0', font:{size:10,weight:'bold'},
                             align:'top', anchor:'top', offset:4,
-                            formatter: v => v!==null ? v.toFixed(1)+'%' : ''
+                            formatter: v => v!==null ? Math.round(v)+'%' : ''
                         }
                     },
                     scales: {
@@ -804,30 +811,68 @@
         }
 
         function renderShareChart(marketMap, total) {
-            const ctx = document.getElementById('shareChart').getContext('2d');
-            if(shareChart) shareChart.destroy();
-            shareChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(marketMap),
-                    datasets: [{
-                        data: Object.values(marketMap),
-                        backgroundColor: ['#3b82f6', '#f87171', '#fbbf24', '#34d399', '#60a5fa', '#60a5fa', '#f472b6', '#fb923c', '#94a3b8', '#475569'],
-                        borderWidth: 2, borderColor: 'rgba(5,15,35,0.8)'
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false, cutout: '68%',
-                    plugins: {
-                        legend: { position: 'right', labels: { color: '#cbd5e1', font: { size: 11 }, padding: 10 } },
-                        datalabels: {
-                            color: '#fff', font: { weight: 'bold', size: 10 },
-                            formatter: (v) => total > 0 ? ((v/total)*100).toFixed(1) + '%' : '',
-                            textShadowColor: 'rgba(0,0,0,0.9)', textShadowBlur: 8
-                        }
-                    }
-                }
-            });
+            const container = document.getElementById('shareChart');
+            // เรียงจากมากไปน้อยตาม MS% ล้วนๆ
+            const entries = Object.entries(marketMap)
+                .filter(([, v]) => v > 0)
+                .sort((a, b) => b[1] - a[1]);
+
+            if (entries.length === 0) {
+                container.innerHTML = '<p style="color:#64748b;font-size:11px;text-align:center;padding:16px 0;">ยังไม่มีข้อมูลตลาด</p>';
+                return;
+            }
+
+            const rows = entries.map(([brand, sales], i) => {
+                const ms = total > 0 ? (sales / total * 100) : 0;
+                const isBeger = brand === 'เรา';
+                const displayName = isBeger ? '🏠 BERGER' : brand;
+                const barColor = isBeger ? '#3b82f6' : '#334155';
+                const textColor = isBeger ? '#60a5fa' : '#cbd5e1';
+                const barW = total > 0 ? Math.max(2, (sales / total * 100)).toFixed(1) : 0;
+                return `
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:6px 4px 6px 8px;font-size:9px;font-weight:400;color:rgba(100,116,139,0.6);text-align:right;white-space:nowrap;width:16px;">
+                        ${i + 1}
+                    </td>
+                    <td style="padding:6px 8px;font-size:11px;font-weight:${isBeger?'700':'500'};color:${textColor};white-space:nowrap;">
+                        ${displayName}
+                    </td>
+                    <td style="padding:6px 8px;font-size:11px;color:${textColor};text-align:right;white-space:nowrap;">
+                        ${sales.toLocaleString()}
+                    </td>
+                    <td style="padding:6px 8px;min-width:90px;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <div style="flex:1;background:rgba(255,255,255,0.07);border-radius:4px;height:6px;overflow:hidden;">
+                                <div style="width:${barW}%;background:${barColor};height:100%;border-radius:4px;transition:width 0.4s;"></div>
+                            </div>
+                            <span style="font-size:11px;font-weight:${isBeger?'700':'400'};color:${textColor};white-space:nowrap;min-width:38px;text-align:right;">
+                                ${ms.toFixed(1)}%
+                            </span>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            container.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.12);">
+                        <th style="padding:5px 4px 5px 8px;font-size:10px;font-weight:600;color:#64748b;text-align:right;width:16px;">#</th>
+                        <th style="padding:5px 8px;font-size:10px;font-weight:600;color:#64748b;text-align:left;">แบรนด์</th>
+                        <th style="padding:5px 8px;font-size:10px;font-weight:600;color:#64748b;text-align:right;">ยอดขาย</th>
+                        <th style="padding:5px 8px;font-size:10px;font-weight:600;color:#64748b;text-align:right;">MS%</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr style="border-top:1px solid rgba(255,255,255,0.12);">
+                        <td style="padding:6px 4px 6px 8px;"></td>
+                        <td style="padding:6px 8px;font-size:10px;font-weight:600;color:#64748b;">รวมตลาด</td>
+                        <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#e2e8f0;text-align:right;">${total.toLocaleString()}</td>
+                        <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#e2e8f0;text-align:right;">100%</td>
+                    </tr>
+                </tfoot>
+            </table>`;
         }
 
         function renderWeeklyChart(weekSales) {
@@ -1142,9 +1187,23 @@
 
             const competitors = {};
             if (!competitorSection.classList.contains('hidden')) {
+                const emptyInputs = [];
                 document.querySelectorAll('.competitor-input').forEach(input => {
-                    competitors[input.getAttribute('data-brand')] = parseFloat(input.value) || 0;
+                    const val = input.value.trim();
+                    if (val === '') emptyInputs.push(input);
+                    competitors[input.getAttribute('data-brand')] = parseFloat(val) || 0;
                 });
+                if (emptyInputs.length > 0) {
+                    emptyInputs.forEach(input => {
+                        input.classList.remove('competitor-error');
+                        void input.offsetWidth; // reflow เพื่อ restart animation
+                        input.classList.add('competitor-error');
+                        input.addEventListener('animationend', () => input.classList.remove('competitor-error'), { once: true });
+                    });
+                    emptyInputs[0].focus();
+                    showErrorMessage(`กรอกยอดคู่แข่งให้ครบ — ถ้าไม่มียอดให้ใส่ 0`);
+                    return;
+                }
             }
 
             btn.disabled = true;
@@ -1685,6 +1744,16 @@
         }
         .float-anim { animation: float-slow 3s ease-in-out infinite; }
 
+        @keyframes competitor-error {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); border-color: rgba(239,68,68,0.3); }
+            50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.35); border-color: rgba(239,68,68,0.9); }
+        }
+        .competitor-error {
+            animation: competitor-error 0.7s ease-in-out 4;
+            border-color: rgba(239,68,68,0.8) !important;
+            background: rgba(239,68,68,0.08) !important;
+        }
+
         /* Top spotlight ray */
         .spotlight {
             pointer-events: none;
@@ -1731,7 +1800,7 @@
                         <h1 class="text-2xl font-black font-jakarta text-white tracking-tight leading-tight">Sales Daily Report</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <p class="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em]">รายงานยอดสะสม MTD</p>
-                            <span class="text-[9px] text-slate-600 font-bold">V1.30</span>
+                            <span class="text-[9px] text-slate-600 font-bold">V1.40</span>
                         </div>
                     </div>
                 </div>
@@ -1793,6 +1862,7 @@
                         <div class="flex items-center gap-2 mb-4">
                             <div class="w-1.5 h-4 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]"></div>
                             <h3 class="text-[10px] font-black text-blue-300 uppercase tracking-[0.15em]">Competitor Cumulative</h3>
+                            <span class="ml-1 text-[9px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-full px-2 py-0.5">ครบทุกช่อง · ไม่มียอดใส่ 0</span>
                         </div>
                         <div id="competitor-inputs" class="grid grid-cols-2 gap-2.5"></div>
                     </div>
@@ -1841,7 +1911,7 @@
         <header class="header-glass px-4 pt-3 pb-3 sticky top-0 z-10">
             <div class="flex items-center justify-between mb-2">
                 <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">MTD Analytics</span>
-                <span class="text-[9px] text-slate-600 font-bold">V1.30</span>
+                <span class="text-[9px] text-slate-600 font-bold">V1.40</span>
                 <h1 id="ui-display-branch" class="text-sm font-black font-jakarta text-white tracking-tight hidden">Sales Daily Report</h1>
             </div>
             <div id="dashboard-filter-container" class="grid grid-cols-2 gap-2">
@@ -2066,7 +2136,7 @@
             <!-- Market Share -->
             <div class="glass-card rounded-[2rem] p-5">
                 <p class="card-label text-blue-300 mb-4">ส่วนแบ่งการตลาด</p>
-                <div class="h-52"><canvas id="shareChart"></canvas></div>
+                <div class="h-52"><div id="shareChart" style="overflow-y:auto;max-height:208px;"></div></div>
             </div>
 
             <!-- Trend Line -->
