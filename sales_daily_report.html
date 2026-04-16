@@ -34,15 +34,40 @@
         // 1103733=หาดใหญ่, 1103720=พิษณุโลก, 1103723=กาญจนบุรี, 1103707=บุรีรัมย์
         // 1103714=ชัยภูมิ, 1103711=เชียงราย, 1103709=อยุธยา, 1110151=บางพูน
         // 1112236=เทพารักษ์, 1112232=นครสวรรค์, 1113451=ภูเก็ต
-        const branchData = {
-            "DH อุบลราชธานี": 3520000, "DH โคราช": 2600000, "DH รังสิต": 2100000, "DH ขอนแก่น": 1870000,
-            "DH สุราษฎร์ธานี": 1320000, "DH มาบตะพุด": 1430000, "DH อุดรธานี": 1200000, "DH สุรินทร์": 1300000,
-            "DH ชัยภูมิ": 1200000, "DH เชียงใหม่": 1430000, "DH บางบัวทอง": 800000, "DH เพชรเกษม": 1300000,
-            "DH ชลบุรี(อมตะนคร)": 1200000, "DH พิษณุโลก": 1200000, "DH พระราม 2": 800000, "DH แหลมฉบัง (บางละมุง)": 1100000,
-            "DH บุรีรัมย์": 770000, "DH เชียงราย": 770000, "DH บ่อวิน": 627000, "DH หาดใหญ่": 880000,
-            "DH อยุธยา": 660000, "DH บางพูน": 520000, "DH กาญจนบุรี": 440000, "DH บางนา": 500000,
-            "DH เทพารักษ์": 400000, "DH นครสวรรค์": 400000, "DH ภูเก็ต": 600000
+        // Monthly targets — key = "YYYY-MM"
+        const monthlyTargets = {
+            "2025-03": {
+                "DH อุบลราชธานี": 3520000, "DH โคราช": 2600000, "DH รังสิต": 2100000, "DH ขอนแก่น": 1870000,
+                "DH สุราษฎร์ธานี": 1320000, "DH มาบตะพุด": 1430000, "DH อุดรธานี": 1200000, "DH สุรินทร์": 1300000,
+                "DH ชัยภูมิ": 1200000, "DH เชียงใหม่": 1430000, "DH บางบัวทอง": 800000, "DH เพชรเกษม": 1300000,
+                "DH ชลบุรี(อมตะนคร)": 1200000, "DH พิษณุโลก": 1200000, "DH พระราม 2": 800000, "DH แหลมฉบัง (บางละมุง)": 1100000,
+                "DH บุรีรัมย์": 770000, "DH เชียงราย": 770000, "DH บ่อวิน": 627000, "DH หาดใหญ่": 880000,
+                "DH อยุธยา": 660000, "DH บางพูน": 520000, "DH กาญจนบุรี": 440000, "DH บางนา": 500000,
+                "DH เทพารักษ์": 400000, "DH นครสวรรค์": 400000, "DH ภูเก็ต": 600000
+            },
+            "2025-04": {
+                "DH อุบลราชธานี": 3080000, "DH โคราช": 2350000, "DH รังสิต": 1710000, "DH ขอนแก่น": 1170000,
+                "DH อุดรธานี": 990000, "DH พระราม 2": 810000, "DH บางบัวทอง": 855000, "DH เชียงใหม่": 1170000,
+                "DH บางนา": 360000, "DH เพชรเกษม": 765000, "DH สุรินทร์": 1320000, "DH มาบตะพุด": 1170000,
+                "DH แหลมฉบัง (บางละมุง)": 858000, "DH บ่อวิน": 513000, "DH ชลบุรี(อมตะนคร)": 765000,
+                "DH สุราษฎร์ธานี": 1430000, "DH หาดใหญ่": 603000, "DH พิษณุโลก": 990000, "DH กาญจนบุรี": 468000,
+                "DH บุรีรัมย์": 675000, "DH ชัยภูมิ": 990000, "DH เชียงราย": 630000, "DH อยุธยา": 585000,
+                "DH บางพูน": 585000, "DH นครสวรรค์": 400000, "DH เทพารักษ์": 400000, "DH ภูเก็ต": 600000
+            },
+            "2026-04": {
+                "DH อุบลราชธานี": 3080000, "DH โคราช": 2350000, "DH รังสิต": 1710000, "DH ขอนแก่น": 1170000,
+                "DH อุดรธานี": 990000, "DH พระราม 2": 810000, "DH บางบัวทอง": 855000, "DH เชียงใหม่": 1170000,
+                "DH บางนา": 360000, "DH เพชรเกษม": 765000, "DH สุรินทร์": 1320000, "DH มาบตะพุด": 1170000,
+                "DH แหลมฉบัง (บางละมุง)": 858000, "DH บ่อวิน": 513000, "DH ชลบุรี(อมตะนคร)": 765000,
+                "DH สุราษฎร์ธานี": 1430000, "DH หาดใหญ่": 603000, "DH พิษณุโลก": 990000, "DH กาญจนบุรี": 468000,
+                "DH บุรีรัมย์": 675000, "DH ชัยภูมิ": 990000, "DH เชียงราย": 630000, "DH อยุธยา": 585000,
+                "DH บางพูน": 585000, "DH นครสวรรค์": 400000, "DH เทพารักษ์": 400000, "DH ภูเก็ต": 600000
+            }
         };
+        // Helper: get target map for a given "YYYY-MM" string (fallback to March if not found)
+        const getMonthlyBranchData = (monthKey) => monthlyTargets[monthKey] || monthlyTargets["2025-03"];
+        // branchData kept as alias for branch list / dropdowns (use March as reference list)
+        const branchData = monthlyTargets["2025-03"];
         const competitorBrands = ["TOA", "NIPPON", "ICI", "Captain", "Delta", "Pammastic", "Woodtect", "Jotan", "JBP"];
 
         // --- App State ---
@@ -257,7 +282,8 @@
             }
             marketMap["เรา"] = totalOurSales;
 
-            const branchTarget = selectedBranch ? branchData[selectedBranch] : Object.values(branchData).reduce((a,b)=>a+b, 0);
+            const activeBranchData = getMonthlyBranchData(selectedMonthStr);
+            const branchTarget = selectedBranch ? (activeBranchData[selectedBranch] || 0) : Object.values(activeBranchData).reduce((a,b)=>a+b, 0);
             const totalMarketValue = Object.values(marketMap).reduce((a, b) => a + b, 0);
             const ourMarketShare = totalMarketValue > 0 ? (marketMap["เรา"] / totalMarketValue) * 100 : 0;
 
@@ -336,9 +362,9 @@
                 document.getElementById('branch-ms-trend').classList.add('hidden');
 
                 const branchStats = [];
-                Object.keys(branchData).forEach(bName => {
+                Object.keys(activeBranchData).forEach(bName => {
                     const actual = latestByBranch[bName] ? Number(latestByBranch[bName].actual) : 0;
-                    const target = branchData[bName];
+                    const target = activeBranchData[bName];
                     const ach = target > 0 ? (actual / target) * 100 : 0;
                     const pcRegular = latestByBranch[bName] && latestByBranch[bName].pcRegular ? Number(latestByBranch[bName].pcRegular) : 0;
                     const pcPromo = latestByBranch[bName] && latestByBranch[bName].pcPromo ? Number(latestByBranch[bName].pcPromo) : 0;
@@ -1231,7 +1257,7 @@
             try {
                 const docId = `${branch}_${date}`;
                 await saveDoc({
-                    id: docId, branch, target: branchData[branch],
+                    id: docId, branch, target: (getMonthlyBranchData(date.substring(0,7)))[branch] || 0,
                     actual, date, pcRegular, pcPromo, competitors,
                     timestamp: new Date().toISOString()
                 });
@@ -1264,7 +1290,7 @@
         // ─── Notification Logic ────────────────────────────────────────────
         function showSaveNotification(branch, actual, date, competitors) {
             // คำนวณ Forecast%
-            const target = branchData[branch] || 0;
+            const target = (getMonthlyBranchData(date.substring(0,7)))[branch] || 0;
             const now = new Date(date);
             const year = now.getFullYear();
             const month = now.getMonth();
