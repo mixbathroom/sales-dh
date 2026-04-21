@@ -55,13 +55,13 @@
                 "DH บางพูน": 585000, "DH นครสวรรค์": 400000, "DH เทพารักษ์": 400000, "DH ภูเก็ต": 600000
             },
             "2026-04": {
-                "DH อุบลราชธานี": 3080000, "DH โคราช": 2350000, "DH รังสิต": 1710000, "DH ขอนแก่น": 1170000,
-                "DH อุดรธานี": 990000, "DH พระราม 2": 810000, "DH บางบัวทอง": 855000, "DH เชียงใหม่": 1170000,
-                "DH บางนา": 360000, "DH เพชรเกษม": 765000, "DH สุรินทร์": 1320000, "DH มาบตะพุด": 1170000,
-                "DH แหลมฉบัง (บางละมุง)": 858000, "DH บ่อวิน": 513000, "DH ชลบุรี(อมตะนคร)": 765000,
-                "DH สุราษฎร์ธานี": 1430000, "DH หาดใหญ่": 603000, "DH พิษณุโลก": 990000, "DH กาญจนบุรี": 468000,
-                "DH บุรีรัมย์": 675000, "DH ชัยภูมิ": 990000, "DH เชียงราย": 630000, "DH อยุธยา": 585000,
-                "DH บางพูน": 585000, "DH นครสวรรค์": 400000, "DH เทพารักษ์": 400000, "DH ภูเก็ต": 600000
+                "DH อุบลราชธานี": 3000000, "DH โคราช": 2200000, "DH รังสิต": 2000000, "DH ขอนแก่น": 1850000,
+                "DH อุดรธานี": 1100000, "DH พระราม 2": 800000, "DH บางบัวทอง": 800000, "DH เชียงใหม่": 1300000,
+                "DH บางนา": 320000, "DH เพชรเกษม": 800000, "DH สุรินทร์": 1220000, "DH มาบตะพุด": 1200000,
+                "DH แหลมฉบัง (บางละมุง)": 1100000, "DH บ่อวิน": 600000, "DH ชลบุรี(อมตะนคร)": 1100000,
+                "DH สุราษฎร์ธานี": 1500000, "DH หาดใหญ่": 880000, "DH พิษณุโลก": 950000, "DH กาญจนบุรี": 480000,
+                "DH บุรีรัมย์": 850000, "DH ชัยภูมิ": 990000, "DH เชียงราย": 750000, "DH อยุธยา": 550000,
+                "DH บางพูน": 520000, "DH นครสวรรค์": 450000, "DH เทพารักษ์": 450000, "DH ภูเก็ต": 640000
             }
         };
         // Helper: get target map for a given "YYYY-MM" string (fallback to March if not found)
@@ -306,6 +306,32 @@
             animateValue('ui-avg', dailyAvg, '', 0);
             animateValue('ui-forecast', forecast, '', 0);
             animateValue('ui-forecast-ach', branchTarget > 0 ? (forecast / branchTarget) * 100 : 0, '%', 1);
+
+            // New KPIs: target, forecast-kpi, required-daily
+            animateValue('ui-target', branchTarget);
+            animateValue('ui-forecast-kpi', forecast, '', 0);
+            const remainingDays = daysInMonth - todayDate;
+            const remainingGap = Math.max(0, branchTarget - totalOurSales);
+            const requiredDaily = (remainingDays > 0 && remainingGap > 0) ? Math.ceil(remainingGap / remainingDays) : 0;
+            animateValue('ui-required-daily', requiredDaily, '', 0);
+            animateValue('ui-remaining-gap', remainingGap, '', 0);
+            const rdLabel = document.getElementById('ui-remaining-days-label');
+            if (rdLabel) rdLabel.innerText = remainingDays > 0 ? remainingDays + ' วันที่เหลือ' : 'สิ้นเดือนแล้ว';
+            const rdCard = document.getElementById('ui-required-daily-card');
+            if (rdCard) {
+                const rdEl = document.getElementById('ui-required-daily');
+                if (remainingGap <= 0) {
+                    rdCard.style.background = 'linear-gradient(135deg,rgba(16,185,129,0.12),rgba(5,150,105,0.06))';
+                    rdCard.style.borderColor = 'rgba(16,185,129,0.3)';
+                    if (rdEl) { rdEl.innerText = '✅ ถึงเป้าแล้ว!'; rdEl.className = 'text-2xl font-black font-jakarta text-emerald-300'; }
+                    const rdTitle = rdCard.querySelector('p');
+                    if (rdTitle) rdTitle.innerText = '🎯 สถานะเป้าหมาย';
+                } else {
+                    rdCard.style.background = 'linear-gradient(135deg,rgba(239,68,68,0.12),rgba(220,38,38,0.06))';
+                    rdCard.style.borderColor = 'rgba(239,68,68,0.25)';
+                    if (rdEl) rdEl.className = 'text-3xl font-black font-jakarta text-white';
+                }
+            }
 
             // Color the achievement card dynamically
             const achEl = document.getElementById('ui-ach');
@@ -1000,6 +1026,163 @@
 
         window.goToDashboard = () => { window.showPage('dashboard-branch'); };
 
+        let _lastMissingData = [];
+        let _lastMissingMeta = {};
+
+        window.showMissingReports = () => {
+            const selectedMonthStr = dashboardMonthFilter.value;
+            if (!selectedMonthStr) return;
+            const [yearStr, monthStr] = selectedMonthStr.split('-');
+            const yr = parseInt(yearStr), mo = parseInt(monthStr) - 1;
+            const now = new Date();
+            const todayD = (now.getFullYear() === yr && now.getMonth() === mo) ? now.getDate() : new Date(yr, mo + 1, 0).getDate();
+            _lastMissingMeta = { yr, mo, todayD };
+
+            const missingData = [];
+            Object.keys(branchData).sort().forEach(bName => {
+                const reported = new Set((allDocs.filter(d => {
+                    const dd = new Date(d.date);
+                    return d.branch === bName && dd.getMonth() === mo && dd.getFullYear() === yr;
+                })).map(d => d.date));
+                const missingDays = [];
+                for (let i = 1; i <= todayD; i++) {
+                    const key = `${yr}-${String(mo+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                    if (!reported.has(key)) missingDays.push(i);
+                }
+                if (missingDays.length > 0) missingData.push({ name: bName, days: missingDays });
+            });
+
+            const modal = document.getElementById('missing-reports-modal');
+            const body  = document.getElementById('missing-modal-body');
+            const label = document.getElementById('missing-modal-month');
+            const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+            label.innerText = `เดือน ${thaiMonths[mo]} ${yr} · ตรวจสอบถึงวันที่ ${todayD}`;
+
+            if (missingData.length === 0) {
+                body.innerHTML = '<div class="text-center py-8"><div class="text-3xl mb-3">✅</div><p class="text-emerald-400 font-bold text-sm">ทุกสาขาส่งรายงานครบแล้ว!</p></div>';
+            } else {
+                body.innerHTML = missingData.map(b => {
+                    const severity = b.days.length >= 5 ? 'rgba(239,68,68,0.15)' : b.days.length >= 3 ? 'rgba(251,191,36,0.12)' : 'rgba(99,102,241,0.1)';
+                    const borderCol = b.days.length >= 5 ? 'rgba(239,68,68,0.35)' : b.days.length >= 3 ? 'rgba(251,191,36,0.3)' : 'rgba(99,102,241,0.25)';
+                    const textCol = b.days.length >= 5 ? '#fca5a5' : b.days.length >= 3 ? '#fcd34d' : '#a5b4fc';
+                    const dayChips = b.days.map(d => `<span style="display:inline-block;background:rgba(255,255,255,0.07);border-radius:6px;padding:1px 6px;margin:2px 1px;font-weight:700;">${d}</span>`).join('');
+                    return `<div style="background:${severity};border:1px solid ${borderCol};border-radius:14px;padding:10px 12px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                            <span style="font-weight:800;color:#e2e8f0;">${b.name.replace('DH ','')}</span>
+                            <span style="font-weight:700;color:${textCol};font-size:10px;">ขาด ${b.days.length} วัน</span>
+                        </div>
+                        <div style="color:#94a3b8;font-size:10px;">วันที่: ${dayChips}</div>
+                    </div>`;
+                }).join('');
+            }
+
+            _lastMissingData = missingData;
+
+            // Update button label
+            const btnLabel = document.getElementById('btn-missing-label');
+            if (btnLabel) btnLabel.innerText = missingData.length > 0 ? `ขาดส่ง ${missingData.length} สาขา` : 'ทุกสาขาส่งครบ ✅';
+            // Show/hide export button
+            const expBtn = document.getElementById('btn-export-missing');
+            if (expBtn) expBtn.style.display = missingData.length > 0 ? '' : 'none';
+            modal.classList.remove('hidden');
+        };
+
+        window.exportMissingReports = async () => {
+            if (!_lastMissingData.length) return;
+            const { yr, mo, todayD } = _lastMissingMeta;
+            const thaiMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'Sales Daily Report';
+
+            // Sheet 1: สรุปรายสาขา
+            const ws1 = wb.addWorksheet('สรุปขาดส่ง');
+            ws1.columns = [
+                { key: 'branch', width: 24 },
+                { key: 'count',  width: 14 },
+                { key: 'days',   width: 50 },
+            ];
+            const hdr1 = ws1.addRow(['สาขา', 'จำนวนวันที่ขาด', 'วันที่ขาดส่ง']);
+            hdr1.height = 28;
+            hdr1.eachCell(cell => {
+                cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1e3a8a' } };
+                cell.font = { bold:true, color:{ argb:'FFFFFFFF' }, size:11, name:'TH SarabunPSK' };
+                cell.alignment = { horizontal:'center', vertical:'middle' };
+                cell.border = { bottom:{ style:'medium', color:{ argb:'FF1e40af' } } };
+            });
+
+            _lastMissingData.forEach((b, idx) => {
+                const row = ws1.addRow([ b.name, b.days.length, b.days.join(', ') ]);
+                row.height = 22;
+                const bg = idx % 2 === 0 ? 'FFF0F4FF' : 'FFE0E8FF';
+                const countVal = b.days.length;
+                const countBg = countVal >= 5 ? 'FFFEE2E2' : countVal >= 3 ? 'FFFEF3C7' : 'FFf0f9ff';
+                const countColor = countVal >= 5 ? 'FF7F1D1D' : countVal >= 3 ? 'FF78350F' : 'FF1e3a8a';
+                row.eachCell((cell, col) => {
+                    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: col === 2 ? countBg : bg } };
+                    cell.font = { size:10, name:'TH SarabunPSK', bold: col===2, color:{ argb: col===2 ? countColor : 'FF1e293b' } };
+                    cell.alignment = { vertical:'middle', horizontal: col===1 ? 'left' : col===2 ? 'center' : 'left' };
+                    cell.border = { bottom:{ style:'thin', color:{ argb:'FFB6C8EE' } } };
+                });
+            });
+
+            // Summary total row
+            const totalMissing = _lastMissingData.reduce((s,b) => s + b.days.length, 0);
+            const totRow = ws1.addRow(['รวม', totalMissing, `${_lastMissingData.length} สาขา ขาดส่งรวม ${totalMissing} วัน`]);
+            totRow.height = 26;
+            totRow.eachCell(cell => {
+                cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF172554' } };
+                cell.font = { bold:true, color:{ argb:'FFFFFFFF' }, size:11, name:'TH SarabunPSK' };
+                cell.alignment = { vertical:'middle', horizontal:'center' };
+                cell.border = { top:{ style:'medium', color:{ argb:'FF1e40af' } } };
+            });
+
+            // Sheet 2: รายละเอียดแต่ละวัน (สาขา x วัน matrix)
+            const ws2 = wb.addWorksheet('ตารางวันขาดส่ง');
+            const allDaysInMonth = Array.from({length: todayD}, (_,i) => i+1);
+            ws2.columns = [
+                { key:'branch', width:24 },
+                ...allDaysInMonth.map(d => ({ key:`d${d}`, width:5 }))
+            ];
+            const hdr2 = ws2.addRow(['สาขา / วันที่', ...allDaysInMonth]);
+            hdr2.height = 28;
+            hdr2.eachCell((cell, col) => {
+                cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: col===1 ? 'FF1e3a8a' : 'FF0f3460' } };
+                cell.font = { bold:true, color:{ argb:'FFFFFFFF' }, size: col===1 ? 11 : 9, name:'TH SarabunPSK' };
+                cell.alignment = { horizontal:'center', vertical:'middle' };
+                cell.border = { bottom:{ style:'medium', color:{ argb:'FF1e40af' } } };
+            });
+
+            const missingMap = {};
+            _lastMissingData.forEach(b => { missingMap[b.name] = new Set(b.days); });
+            Object.keys(branchData).sort().forEach((bName, idx) => {
+                const rowVals = [bName, ...allDaysInMonth.map(d => missingMap[bName]?.has(d) ? '✕' : '')];
+                const row = ws2.addRow(rowVals);
+                row.height = 20;
+                const bg = idx % 2 === 0 ? 'FFF0F4FF' : 'FFE0E8FF';
+                row.eachCell((cell, col) => {
+                    const isMissing = col > 1 && cell.value === '✕';
+                    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: isMissing ? 'FFFEE2E2' : bg } };
+                    cell.font = { size: col===1 ? 10 : 9, name:'TH SarabunPSK', bold: isMissing, color:{ argb: isMissing ? 'FFdc2626' : 'FF1e293b' } };
+                    cell.alignment = { vertical:'middle', horizontal: col===1 ? 'left' : 'center' };
+                    cell.border = { bottom:{ style:'thin', color:{ argb:'FFB6C8EE' } }, right:{ style:'hair', color:{ argb:'FFB6C8EE' } } };
+                });
+            });
+
+            const buf = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `missing_reports_${thaiMonths[mo]}_${yr}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.closeMissingReports = () => {
+            document.getElementById('missing-reports-modal').classList.add('hidden');
+        };
+
         window.exportToExcel = async () => {
             if (!currentBranchStats.length) { showErrorMessage("ไม่มีข้อมูลสำหรับ Export"); return; }
 
@@ -1012,6 +1195,14 @@
             Object.keys(branchData).forEach(bName => {
                 weekMsPerBranch[bName] = calcWeeklyMS(allDocs, bName, expYear, expMonth);
             });
+
+            // คำนวณวันที่สำหรับ Export
+            const expNow = new Date();
+            const expDaysInMonth = new Date(expYear, expMonth + 1, 0).getDate();
+            const expTodayDate = (expNow.getFullYear() === expYear && expNow.getMonth() === expMonth)
+                ? expNow.getDate()
+                : expDaysInMonth;
+            const expRemainingDays = expDaysInMonth - expTodayDate;
 
             const wb = new ExcelJS.Workbook();
             wb.creator = 'Sales Daily Report';
@@ -1032,10 +1223,13 @@
                 { key: 'ms_w2',       width: 11 },
                 { key: 'ms_w3',       width: 11 },
                 { key: 'ms_w4',       width: 11 },
+                { key: 'dailyAvg',    width: 16 },
+                { key: 'reqDaily',    width: 16 },
+                { key: 'growthPct',   width: 14 },
             ];
 
             // ---- Header row ----
-            const headers = ['สาขา','PC ประจำ','Promo','ยอดขาย (฿)','เป้าหมาย (฿)','% Ach','คาดการณ์สิ้นเดือน','คาดการณ์ %','MS%','MS% W1','MS% W2','MS% W3','MS% W4'];
+            const headers = ['สาขา','PC ประจำ','Promo','ยอดขาย (฿)','เป้าหมาย (฿)','% Ach','คาดการณ์สิ้นเดือน','คาดการณ์ %','MS%','MS% W1','MS% W2','MS% W3','MS% W4','เฉลี่ยต่อวัน (฿)','ต้องทำวันละ (฿)','ต้องเติบโต %'];
             const headerRow = ws.addRow(headers);
             headerRow.height = 32;
             headerRow.eachCell((cell, col) => {
@@ -1053,6 +1247,10 @@
             currentBranchStats.forEach((s, idx) => {
                 const fullName = 'DH ' + s.name;
                 const weekMs = weekMsPerBranch[fullName] || [null, null, null, null];
+                const sDailyAvg = expTodayDate > 0 ? s.actual / expTodayDate : 0;
+                const sRemaining = Math.max(0, s.target - s.actual);
+                const sReqDaily = (expRemainingDays > 0 && sRemaining > 0) ? Math.ceil(sRemaining / expRemainingDays) : 0;
+                const sGrowthPct = (sDailyAvg > 0 && sReqDaily > 0) ? (sReqDaily / sDailyAvg - 1) : (sRemaining <= 0 ? 0 : null);
                 const row = ws.addRow([
                     s.name,
                     s.pcRegular,
@@ -1067,6 +1265,9 @@
                     weekMs[1] !== null ? weekMs[1] / 100 : '',
                     weekMs[2] !== null ? weekMs[2] / 100 : '',
                     weekMs[3] !== null ? weekMs[3] / 100 : '',
+                    sDailyAvg,
+                    sReqDaily > 0 ? sReqDaily : (sRemaining <= 0 ? 0 : ''),
+                    sGrowthPct !== null ? sGrowthPct : '',
                 ]);
                 row.height = 22;
 
@@ -1086,6 +1287,9 @@
                 row.getCell(8).numFmt = '0.0%';
                 row.getCell(9).numFmt = '0.0%';
                 [10,11,12,13].forEach(c => { if (row.getCell(c).value !== '') row.getCell(c).numFmt = '0.0%'; });
+                row.getCell(14).numFmt = '#,##0';
+                if (row.getCell(15).value !== '') row.getCell(15).numFmt = '#,##0';
+                if (row.getCell(16).value !== '') row.getCell(16).numFmt = '+0.0%;-0.0%;0.0%';
 
                 // Color % Ach
                 const achVal = s.ach;
@@ -1094,6 +1298,16 @@
                 const achCell = row.getCell(6);
                 achCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: achBg } };
                 achCell.font = { bold: true, color: { argb: achColor }, size: 10 };
+
+                // Color ต้องเติบโต %
+                if (sGrowthPct !== null && row.getCell(16).value !== '') {
+                    const gVal = sGrowthPct;
+                    const gBg   = gVal <= 0 ? 'FFD1FAE5' : gVal <= 0.3 ? 'FFFEF3C7' : 'FFFEE2E2';
+                    const gColor = gVal <= 0 ? 'FF065F46' : gVal <= 0.3 ? 'FF78350F' : 'FF7F1D1D';
+                    const gCell = row.getCell(16);
+                    gCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: gBg } };
+                    gCell.font = { bold: true, color: { argb: gColor }, size: 10 };
+                }
             });
 
             // ---- Total row ----
@@ -1108,11 +1322,16 @@
             const overallFcAch = totalTarget > 0 ? totalForecast / totalTarget : 0;
             const overallMs    = (totalActual + totalCompSales) > 0 ? totalActual / (totalActual + totalCompSales) : 0;
 
+            const totalDailyAvg = expTodayDate > 0 ? totalActual / expTodayDate : 0;
+            const totalRemaining = Math.max(0, totalTarget - totalActual);
+            const totalReqDaily = (expRemainingDays > 0 && totalRemaining > 0) ? Math.ceil(totalRemaining / expRemainingDays) : 0;
+            const totalGrowthPct = (totalDailyAvg > 0 && totalReqDaily > 0) ? (totalReqDaily / totalDailyAvg - 1) : 0;
             const totalRow = ws.addRow([
                 'รวมทั้งหมด',
                 currentBranchStats.reduce((s, d) => s + d.pcRegular, 0),
                 currentBranchStats.reduce((s, d) => s + d.pcPromo, 0),
-                totalActual, totalTarget, '', totalForecast, '', '', '', '', '', ''
+                totalActual, totalTarget, '', totalForecast, '', '', '', '', '', '',
+                totalDailyAvg, totalReqDaily > 0 ? totalReqDaily : 0, totalGrowthPct
             ]);
             totalRow.getCell(6).value = overallAch;    totalRow.getCell(6).numFmt = '0.0%';
             totalRow.getCell(8).value = overallFcAch;  totalRow.getCell(8).numFmt = '0.0%';
@@ -1128,6 +1347,9 @@
             totalRow.getCell(4).numFmt = '#,##0';
             totalRow.getCell(5).numFmt = '#,##0';
             totalRow.getCell(7).numFmt = '#,##0';
+            totalRow.getCell(14).numFmt = '#,##0';
+            totalRow.getCell(15).numFmt = '#,##0';
+            totalRow.getCell(16).numFmt = '+0.0%;-0.0%;0.0%';
 
             // ---- Save file ----
             const buf = await wb.xlsx.writeBuffer();
@@ -1851,7 +2073,7 @@
                         <h1 class="text-2xl font-black font-jakarta text-white tracking-tight leading-tight">Sales Daily Report</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <p class="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em]">รายงานยอดสะสม MTD</p>
-                            <span class="text-[9px] text-slate-600 font-bold">V1.44</span>
+                            <span class="text-[9px] text-slate-600 font-bold">V2.0</span>
                         </div>
                     </div>
                 </div>
@@ -1962,7 +2184,7 @@
         <header class="header-glass px-4 pt-3 pb-3 sticky top-0 z-10">
             <div class="flex items-center justify-between mb-2">
                 <span class="section-tag bg-blue-500/10 text-blue-300 border border-blue-500/20">MTD Analytics</span>
-                <span class="text-[9px] text-slate-600 font-bold">V1.43</span>
+                <span class="text-[9px] text-slate-600 font-bold">V2.0</span>
                 <h1 id="ui-display-branch" class="text-sm font-black font-jakarta text-white tracking-tight hidden">Sales Daily Report</h1>
             </div>
             <div id="dashboard-filter-container" class="grid grid-cols-2 gap-2">
@@ -1995,6 +2217,29 @@
                 <div class="kpi-card p-5">
                     <p class="card-label">เฉลี่ยต่อวัน</p>
                     <div id="ui-avg" class="card-value text-slate-400">—</div>
+                </div>
+                <div class="kpi-card p-5" style="border-color:rgba(59,130,246,0.3);">
+                    <p class="card-label text-blue-400">เป้าหมาย (บาท)</p>
+                    <div id="ui-target" class="card-value text-blue-300">—</div>
+                </div>
+                <div class="kpi-card p-5" style="border-color:rgba(251,191,36,0.3);">
+                    <p class="card-label text-amber-400">คาดการณ์สิ้นเดือน</p>
+                    <div id="ui-forecast-kpi" class="card-value text-amber-300">—</div>
+                </div>
+            </div>
+
+            <!-- Required Daily Card -->
+            <div id="ui-required-daily-card" class="rounded-[1.5rem] p-5" style="background:linear-gradient(135deg,rgba(239,68,68,0.12),rgba(220,38,38,0.06));border:1px solid rgba(239,68,68,0.25);">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-rose-400 mb-1">🎯 ต้องทำวันละ (เพื่อถึงเป้า)</p>
+                        <div id="ui-required-daily" class="text-3xl font-black font-jakarta text-white">—</div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">ยอดที่ยังขาด</p>
+                        <div id="ui-remaining-gap" class="text-lg font-black font-jakarta text-rose-300">—</div>
+                        <p id="ui-remaining-days-label" class="text-[10px] text-slate-500 mt-0.5">— วันที่เหลือ</p>
+                    </div>
                 </div>
             </div>
 
@@ -2113,6 +2358,37 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
                         ตั้งค่า MS% เป้าหมาย
                     </button>
+                </div>
+                <div class="mt-3">
+                    <button onclick="showMissingReports()" id="btn-missing-reports"
+                        class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl font-bold text-[11px] transition-all active:scale-95"
+                        style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                        <span id="btn-missing-label">สาขาขาดส่งรายงาน</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal: ขาดส่งรายงาน -->
+            <div id="missing-reports-modal" class="hidden fixed inset-0 z-50 flex items-end justify-center" style="background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);" onclick="if(event.target===this)closeMissingReports()">
+                <div class="glass-card w-full max-w-lg rounded-t-[2rem] p-6 pb-10" style="max-height:80vh;overflow-y:auto;">
+                    <div class="flex items-center justify-between mb-5">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">⚠️</span>
+                            <h3 class="text-sm font-black font-jakarta text-white">สาขาที่ขาดส่งรายงาน</h3>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="exportMissingReports()" id="btn-export-missing"
+                                class="flex items-center gap-1.5 text-[10px] font-bold py-1.5 px-3 rounded-xl transition-all active:scale-95"
+                                style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#34d399;">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                Export
+                            </button>
+                            <button onclick="closeMissingReports()" class="text-slate-500 hover:text-white transition-colors text-xl font-black">✕</button>
+                        </div>
+                    </div>
+                    <p id="missing-modal-month" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">—</p>
+                    <div id="missing-modal-body" class="space-y-3 text-xs"></div>
                 </div>
             </div>
 
