@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>คูปองส่วนลด — Beger DoHome</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase Compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBA9ZkAIIEUsS-Ok4KAVrZVlWjhbRWXb0I",
+  authDomain: "coupon3-c2baf.firebaseapp.com",
+  databaseURL: "https://coupon3-c2baf-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "coupon3-c2baf",
+  storageBucket: "coupon3-c2baf.firebasestorage.app",
+  messagingSenderId: "203950647482",
+  appId: "1:203950647482:web:6a728dd6ff64096e423a83",
+  measurementId: "G-3PFRZ4PM9R"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+</script>
+<style>
+:root {
+  --primary:#005F73;--primary-light:#E1F5EE;--accent:#0F766E;
+  --success:#16A34A;--danger:#DC2626;--warning:#D97706;
+  --bg:#F8FAFC;--card:#FFFFFF;--text:#1E293B;--muted:#64748B;--border:#E2E8F0;--radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Sarabun',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%}
+
+.header{background:var(--primary);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between}
+.header-title{font-size:16px;font-weight:700}
+.header-sub{font-size:12px;opacity:.7;margin-bottom:2px}
+.demo-badge{font-size:11px;background:#F59E0B;color:#78350F;padding:4px 12px;border-radius:999px;font-weight:700}
+
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--border)}
+.tab{flex:1;padding:16px;text-align:center;font-size:15px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;transition:all .2s}
+.tab.active{color:var(--primary);border-color:var(--primary)}
+
+.card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);padding:20px 16px;margin:14px 12px}
+.field{margin-bottom:20px}
+label{display:block;font-size:14px;color:var(--muted);font-weight:600;margin-bottom:8px}
+select,input{width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;font-family:inherit;color:var(--text);background:#fff;outline:none;transition:border .15s;-webkit-appearance:none;appearance:none}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748B' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+select:focus,input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,95,115,.12)}
+input[type=number]{-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+
+.btn{display:block;width:100%;padding:16px;border-radius:12px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;border:none;transition:all .15s;letter-spacing:.02em}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:active{background:var(--accent);transform:scale(.98)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{display:inline-block;width:auto;padding:9px 16px;font-size:13px;border-radius:8px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text);transition:all .15s}
+.btn-sm:active{background:var(--bg)}
+
+.alert{padding:11px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;border-left:3px solid}
+.alert-error{background:#FEE2E2;color:#991B1B;border-color:var(--danger)}
+
+.status-box{text-align:center;padding:8px 0 4px}
+.req-num{font-size:36px;font-weight:800;color:var(--primary);letter-spacing:2px;font-family:monospace;word-break:break-all}
+.badge{display:inline-block;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:700}
+.badge-pending{background:#FEF3C7;color:#92400E}
+.badge-approved{background:#D1FAE5;color:#065F46}
+.badge-rejected{background:#FEE2E2;color:#991B1B}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+.info-row{background:var(--bg);border-radius:8px;padding:12px 16px;margin-top:10px}
+.info-label{color:var(--muted);font-size:12px;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.info-value{font-weight:700;font-size:16px}
+.timer{font-size:13px;color:var(--muted);margin-top:8px}
+
+/* ===== SUMMARY ===== */
+.sum-wrap{padding:16px 20px}
+.sum-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.sum-topbar-title{font-size:16px;font-weight:700}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.stat-num{font-size:28px;font-weight:800;line-height:1}
+.stat-label{font-size:12px;color:var(--muted);margin-top:4px}
+
+.section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table thead th{background:#F1F5F9;padding:9px 13px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table tbody td{padding:12px 13px;border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tbody tr:last-child td{border-bottom:none}
+.data-table tbody tr{transition:background .15s}
+.data-table tbody tr:hover{background:#FAFBFC}
+
+.quota-bar-bg{height:6px;background:var(--border);border-radius:3px;width:110px;overflow:hidden;display:inline-block;vertical-align:middle}
+.quota-bar-fill{height:100%;border-radius:3px;transition:width .4s}
+
+.empty-state{text-align:center;padding:36px;color:var(--muted);font-size:13px}
+.refresh-note{font-size:11px;color:var(--muted);text-align:center;margin-top:10px}
+
+.act-approve{padding:5px 12px;border-radius:5px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;border:none;background:var(--success);color:#fff;margin-right:4px;transition:all .15s}
+.act-approve:hover{background:#15803d}
+.act-reject{padding:5px 10px;border-radius:5px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;background:#fff;color:var(--muted);border:1px solid var(--border);transition:all .15s}
+.act-reject:hover{background:#FEF2F2;color:var(--danger);border-color:#FECACA}
+.act-delete{padding:5px 10px;border-radius:5px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;background:#fff;color:var(--muted);border:1px solid var(--border);transition:all .15s}
+.act-delete:hover{background:#FEF2F2;color:var(--danger);border-color:#FECACA}
+/* PIN Modal */
+.pin-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center}
+.pin-modal{background:#fff;border-radius:18px;padding:28px 24px 22px;width:min(340px,90vw);box-shadow:0 8px 40px rgba(0,0,0,.22);text-align:center}
+.pin-modal-title{font-size:15px;font-weight:700;margin-bottom:6px}
+.pin-modal-sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+.pin-modal-input{width:140px;padding:14px 16px;border:2px solid var(--border);border-radius:10px;font-size:26px;font-family:monospace;letter-spacing:8px;text-align:center;outline:none;transition:border .15s;margin-bottom:6px}
+.pin-modal-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,95,115,.1)}
+.pin-modal-input.shake{border-color:var(--danger)!important;animation:shake .3s}
+.pin-modal-err{font-size:12px;color:var(--danger);min-height:18px;margin-bottom:10px}
+.pin-modal-btns{display:flex;gap:8px;justify-content:center}
+.pin-modal-confirm{padding:13px 26px;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;border:none;color:#fff;transition:all .15s}
+.pin-modal-cancel{padding:13px 20px;border-radius:10px;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;background:#fff;color:var(--muted);border:1px solid var(--border);transition:all .15s}
+.pin-modal-cancel:hover{background:var(--bg)}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.hidden{display:none!important}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .25s ease}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-sub">Beger — Modern Retail</div>
+    <div class="header-title">ระบบคูปองส่วนลด DoHome</div>
+  </div>
+
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-branch" onclick="showTab('branch')">สาขา</div>
+  <div class="tab" id="tab-summary" onclick="showTab('summary')">สรุป</div>
+</div>
+
+<!-- ===== BRANCH ===== -->
+<div id="view-branch">
+  <div id="branch-form">
+    <div class="card fade-in">
+      <div class="field">
+        <label>เลขที่เอกสาร <span style="color:var(--danger);font-weight:700">*</span></label>
+        <input type="text" id="doc-number" placeholder="เช่น 1002214769" oninput="validateForm()" style="font-family:monospace;letter-spacing:.05em">
+      </div>
+      <div class="field">
+        <label>สาขา DoHome</label>
+        <select id="branch-select" onchange="validateForm()">
+          <option value="">— เลือกสาขา —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>ชื่อลูกค้า</label>
+        <input type="text" id="customer-name" placeholder="ชื่อ-นามสกุลลูกค้า">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr;gap:0">
+        <div class="field">
+          <label>เบอร์โทรลูกค้า</label>
+          <input type="tel" id="customer-phone" placeholder="08X-XXX-XXXX">
+        </div>
+        <div class="field">
+          <label>มูลค่าสั่งซื้อ (บาท)</label>
+          <input type="number" id="order-value" min="0" placeholder="ประมาณการณ์">
+        </div>
+      </div>
+      <div class="field">
+        <label>จำนวนคูปอง <span style="font-weight:400;color:var(--muted)">(ใบละ 100 บาท)</span></label>
+        <input type="number" id="qty-input" min="1" placeholder="ระบุจำนวนใบ" oninput="onQtyChange()">
+        <div id="qty-calc" style="display:none;margin-top:8px;padding:10px 14px;background:var(--primary-light);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--accent)">มูลค่าคูปองรวม</span>
+          <span id="qty-total" style="font-size:18px;font-weight:800;color:var(--primary)">฿0</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>เหตุผล <span style="font-weight:400;color:var(--muted)">(ไม่บังคับ)</span></label>
+        <input type="text" id="reason-input" placeholder="เช่น ลูกค้า VIP / โปรโมชั่น เม.ย.">
+      </div>
+      <div id="form-error" class="alert alert-error hidden"></div>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitRequest()" disabled style="margin-top:8px;padding:18px;font-size:18px;border-radius:14px;box-shadow:0 4px 16px rgba(0,95,115,.25)">📨 ส่งขออนุมัติ</button>
+    </div>
+  </div>
+
+  <div id="branch-status" class="hidden">
+    <div class="card fade-in">
+      <div class="status-box">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">เลขที่คำขอ — แจ้งผู้อนุมัติด้วยหมายเลขนี้</div>
+        <div class="req-num" id="display-req-id">REQ-00000</div>
+        <div id="status-badge" class="badge badge-pending" style="margin:12px 0">
+          <span class="pulse"></span>รอการอนุมัติ
+        </div>
+        <div class="timer" id="elapsed-timer"></div>
+      </div>
+      <div class="info-row">
+        <div class="info-label">เลขที่เอกสาร</div>
+        <div class="info-value" id="display-docnum" style="font-family:monospace;letter-spacing:.05em">—</div>
+      </div>
+      <div class="info-row">
+        <div class="info-label">สาขา</div>
+        <div class="info-value" id="display-branch">—</div>
+      </div>
+      <div class="info-row">
+        <div class="info-label">ลูกค้า</div>
+        <div class="info-value" id="display-customer">—</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="info-row" style="margin-top:0">
+          <div class="info-label">เบอร์โทร</div>
+          <div class="info-value" id="display-phone">—</div>
+        </div>
+        <div class="info-row" style="margin-top:0">
+          <div class="info-label">มูลค่าสั่งซื้อ</div>
+          <div class="info-value" id="display-order">—</div>
+        </div>
+      </div>
+      <div class="info-row">
+        <div class="info-label">จำนวน</div>
+        <div class="info-value" id="display-qty">—</div>
+      </div>
+      <div class="info-row hidden" id="approver-row">
+        <div class="info-label">อนุมัติโดย</div>
+        <div class="info-value" id="display-approver">—</div>
+      </div>
+      <button class="btn" style="margin-top:16px;background:#64748B;color:#fff" onclick="resetForm()">ส่งคำขอใหม่</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SUMMARY ===== -->
+<div id="view-summary" class="hidden">
+  <div class="sum-wrap">
+    <div class="sum-topbar">
+      <div class="sum-topbar-title">ภาพรวมคูปอง DoHome</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="renderSummary()">⟳ รีเฟรช</button>
+        <button class="btn-sm" onclick="exportExcel()" style="background:#16A34A;color:#fff;border-color:#16A34A;font-weight:700">📥 Export Excel</button>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num" id="stat-pending" style="color:var(--warning)">0</div>
+        <div class="stat-label">รอดำเนินการ</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-approved" style="color:var(--success)">0</div>
+        <div class="stat-label">อนุมัติวันนี้</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-coupons" style="color:var(--primary)">0</div>
+        <div class="stat-label">ใบรวมวันนี้</div>
+      </div>
+      <div class="stat-card" style="grid-column:span 1">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">โควต้ารวม</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--muted)">โควต้าทั้งหมด</span>
+            <span id="stat-quota-total" style="font-size:14px;font-weight:800;color:var(--text)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--muted)">ใช้ไปแล้ว</span>
+            <span id="stat-total-used" style="font-size:14px;font-weight:800;color:var(--warning)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--muted)">คงเหลือ</span>
+            <span id="stat-quota-rem" style="font-size:14px;font-weight:800;color:var(--success)">0</span>
+          </div>
+          <div style="margin-top:4px">
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="stat-quota-bar" style="height:100%;border-radius:3px;background:var(--primary);width:0%;transition:width .4s"></div>
+            </div>
+            <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:3px"><span id="stat-quota-pct">0</span>%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- รายการคำขอ -->
+    <div class="section-title">รายการคำขออนุมัติ</div>
+    <div class="tbl-wrap" id="req-wrap">
+      <div class="empty-state" id="req-empty">ยังไม่มีรายการ — ลองกรอกฟอร์มในแท็บ "สาขา"</div>
+      <table class="data-table hidden" id="req-table">
+        <thead>
+          <tr>
+            <th>วันที่ / เวลา</th>
+            <th>เลขที่เอกสาร</th>
+            <th>สาขา</th>
+            <th>ลูกค้า</th>
+            <th>เบอร์โทร</th>
+            <th>มูลค่าซื้อ</th>
+            <th>คูปอง (ใบ)</th>
+            <th>เหตุผล</th>
+            <th>สถานะ</th>
+            <th style="min-width:220px">รหัส 321 + ดำเนินการ</th>
+          </tr>
+        </thead>
+        <tbody id="req-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- โควต้ารายสาขา -->
+    <div class="section-title" style="margin-top:24px">โควต้ารายสาขา</div>
+    <div class="tbl-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>สาขา</th>
+            <th style="text-align:right">โควต้า</th>
+            <th style="text-align:right">ใช้แล้ว</th>
+            <th style="text-align:right">คงเหลือ</th>
+            <th>สัดส่วน</th>
+          </tr>
+        </thead>
+        <tbody id="quota-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="refresh-note" id="refresh-note"></div>
+  </div>
+</div>
+
+<script>
+const BRANCHES = [
+  {name:"DH อุบลราชธานี",quota:533},{name:"DH หาดใหญ่",quota:247},
+  {name:"DH สุราษฎร์ธานี",quota:241},{name:"DH โคราช",quota:239},
+  {name:"DH ขอนแก่น",quota:225},{name:"DH ชลบุรี(อมตะนคร)",quota:187},
+  {name:"DH รังสิต",quota:184},{name:"DH แหลมฉบัง",quota:182},
+  {name:"DH เชียงใหม่",quota:182},{name:"DH มาบตะพุด",quota:170},
+  {name:"DH สุรินทร์",quota:169},{name:"DH พิษณุโลก",quota:154},
+  {name:"DH อุดรธานี",quota:125},{name:"DH ชัยภูมิ",quota:122},
+  {name:"DH บุรีรัมย์",quota:111},{name:"DH พระราม 2",quota:97},
+  {name:"DH บ่อวิน",quota:96},{name:"DH เพชรเกษม",quota:92},
+  {name:"DH เชียงราย",quota:88},{name:"DH บางบัวทอง",quota:85},
+  {name:"DH ภูเก็ต",quota:80},{name:"DH บางพูน",quota:71},
+  {name:"DH กาญจนบุรี",quota:64},{name:"DH อยุธยา",quota:63},
+  {name:"DH เทพารักษ์",quota:44},{name:"DH นครสวรรค์",quota:43},
+  {name:"DH บางนา",quota:34},
+];
+
+const APPROVE_CODE = '321';
+
+// ===== LOCAL DATA STORE =====
+let requests = [];
+let pollTimer = null, timerInterval = null, currentReqId = null, submitTime = null;
+
+function genReqId() {
+  return 'REQ-' + String(Date.now()).slice(-5);
+}
+
+function init() {
+  const sel = document.getElementById('branch-select');
+  BRANCHES.forEach(b => {
+    const o = document.createElement('option');
+    o.value = o.textContent = b.name;
+    sel.appendChild(o);
+  });
+
+  // ===== Firebase Real-time Listener =====
+  db.ref('requests').on('value', snapshot => {
+    requests = [];
+    snapshot.forEach(child => {
+      requests.push({ fbKey: child.key, ...child.val() });
+    });
+    requests.sort((a, b) => new Date(b.time) - new Date(a.time));
+    if (!document.getElementById('view-summary').classList.contains('hidden')) {
+      renderSummary();
+    }
+  });
+}
+
+function showTab(tab) {
+  document.getElementById('view-branch').classList.toggle('hidden', tab !== 'branch');
+  document.getElementById('view-summary').classList.toggle('hidden', tab !== 'summary');
+  document.getElementById('tab-branch').classList.toggle('active', tab === 'branch');
+  document.getElementById('tab-summary').classList.toggle('active', tab === 'summary');
+  if (tab === 'summary') renderSummary();
+}
+
+// ===== BRANCH FORM =====
+function validateForm() {
+  const branch = document.getElementById('branch-select').value;
+  const qty    = parseInt(document.getElementById('qty-input').value) || 0;
+  const docNum = document.getElementById('doc-number').value.trim();
+  document.getElementById('submit-btn').disabled = !branch || qty < 1 || !docNum;
+}
+
+function onQtyChange() {
+  validateForm();
+  const qty = parseInt(document.getElementById('qty-input').value) || 0;
+  const calc = document.getElementById('qty-calc');
+  if (qty > 0) {
+    calc.style.display = 'flex';
+    document.getElementById('qty-total').textContent = '฿' + (qty * 100).toLocaleString();
+  } else {
+    calc.style.display = 'none';
+  }
+}
+
+function submitRequest() {
+  const branch    = document.getElementById('branch-select').value;
+  const qty       = parseInt(document.getElementById('qty-input').value);
+  const reason    = document.getElementById('reason-input').value.trim();
+  const customer  = document.getElementById('customer-name').value.trim();
+  const phone     = document.getElementById('customer-phone').value.trim();
+  const orderVal  = parseInt(document.getElementById('order-value').value) || 0;
+  const docNum    = document.getElementById('doc-number').value.trim();
+  const errEl     = document.getElementById('form-error');
+  errEl.classList.add('hidden');
+
+  if (!docNum) {
+    errEl.textContent = 'กรุณาระบุเลขที่เอกสาร';
+    errEl.classList.remove('hidden');
+    document.getElementById('doc-number').focus();
+    return;
+  }
+
+  // ตรวจโควต้า
+  const b = BRANCHES.find(x => x.name === branch);
+  const used = requests.filter(r => r.branch === branch && r.status === 'อนุมัติแล้ว')
+                       .reduce((s, r) => s + r.qty, 0);
+  const remaining = b.quota - used;
+  if (qty > remaining) {
+    errEl.textContent = `โควต้าคงเหลือ ${remaining} ใบ (ขอได้ไม่เกินนี้)`;
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const reqId = genReqId();
+  const newReq = {
+    reqId, branch, qty, reason, customer, phone,
+    orderValue: orderVal,
+    docNumber: docNum,
+    time: new Date().toISOString(),
+    status: 'รอดำเนินการ',
+    approvedBy: '',
+    approvedAt: ''
+  };
+
+  // Push ขึ้น Firebase
+  db.ref('requests').push(newReq)
+    .catch(err => {
+      errEl.textContent = 'Firebase error: ' + err.message;
+      errEl.classList.remove('hidden');
+    });
+
+  currentReqId = reqId;
+  submitTime   = Date.now();
+
+  document.getElementById('display-req-id').textContent   = reqId;
+  document.getElementById('display-docnum').textContent   = docNum;
+  document.getElementById('display-branch').textContent   = branch;
+  document.getElementById('display-customer').textContent = customer || '—';
+  document.getElementById('display-phone').textContent    = phone || '—';
+  document.getElementById('display-order').textContent    = orderVal ? '฿' + orderVal.toLocaleString() : '—';
+  document.getElementById('display-qty').textContent      = qty + ' ใบ  (฿' + (qty * 100).toLocaleString() + ')';
+
+  document.getElementById('branch-form').classList.add('hidden');
+  document.getElementById('branch-status').classList.remove('hidden');
+
+  startElapsedTimer();
+  startPoll(reqId);
+}
+
+function startElapsedTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const sec = Math.floor((Date.now() - submitTime) / 1000);
+    const m = Math.floor(sec / 60), s = sec % 60;
+    document.getElementById('elapsed-timer').textContent =
+      'รอมาแล้ว ' + (m > 0 ? m + ' นาที ' + s : s) + ' วินาที';
+  }, 1000);
+}
+
+function startPoll(reqId) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    const req = requests.find(r => r.reqId === reqId);
+    if (!req) return;
+    const badge = document.getElementById('status-badge');
+    if (req.status === 'อนุมัติแล้ว') {
+      badge.className = 'badge badge-approved';
+      badge.innerHTML = '✅ อนุมัติแล้ว';
+      document.getElementById('display-approver').textContent = req.approvedBy || '—';
+      document.getElementById('approver-row').classList.remove('hidden');
+      document.getElementById('elapsed-timer').textContent = '';
+      clearInterval(pollTimer); clearInterval(timerInterval);
+    } else if (req.status === 'ปฏิเสธ') {
+      badge.className = 'badge badge-rejected';
+      badge.innerHTML = '❌ ปฏิเสธ';
+      document.getElementById('display-approver').textContent = req.approvedBy || '—';
+      document.getElementById('approver-row').classList.remove('hidden');
+      document.getElementById('elapsed-timer').textContent = '';
+      clearInterval(pollTimer); clearInterval(timerInterval);
+    }
+  }, 800);
+}
+
+function resetForm() {
+  clearInterval(pollTimer); clearInterval(timerInterval);
+  document.getElementById('branch-form').classList.remove('hidden');
+  document.getElementById('branch-status').classList.add('hidden');
+  ['doc-number','branch-select','qty-input','reason-input','customer-name','customer-phone','order-value']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('form-error').classList.add('hidden');
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('submit-btn').textContent = 'ส่งขออนุมัติ';
+  document.getElementById('status-badge').className = 'badge badge-pending';
+  document.getElementById('status-badge').innerHTML = '<span class="pulse"></span>รอการอนุมัติ';
+  document.getElementById('approver-row').classList.add('hidden');
+  document.getElementById('elapsed-timer').textContent = '';
+  document.getElementById('qty-calc').style.display = 'none';
+}
+
+// ===== SUMMARY =====
+function renderSummary() {
+  const all      = requests;
+  const pending  = all.filter(r => r.status === 'รอดำเนินการ');
+  const approved = all.filter(r => r.status === 'อนุมัติแล้ว' && isToday(r.approvedAt));
+  const couponsToday = approved.reduce((s, r) => s + r.qty, 0);
+  const totalUsed    = all.filter(r => r.status === 'อนุมัติแล้ว').reduce((s, r) => s + r.qty, 0);
+
+  const totalQuota = BRANCHES.reduce((s, b) => s + b.quota, 0);
+  const quotaRem   = totalQuota - totalUsed;
+  const quotaPct   = totalQuota > 0 ? Math.round(totalUsed / totalQuota * 100) : 0;
+  const barColor   = quotaPct >= 90 ? '#EF4444' : quotaPct >= 70 ? '#F59E0B' : 'var(--primary)';
+
+  document.getElementById('stat-pending').textContent    = pending.length;
+  document.getElementById('stat-approved').textContent   = approved.length;
+  document.getElementById('stat-coupons').textContent    = couponsToday;
+  document.getElementById('stat-quota-total').textContent = totalQuota.toLocaleString();
+  document.getElementById('stat-total-used').textContent  = totalUsed.toLocaleString();
+  document.getElementById('stat-quota-rem').textContent   = quotaRem.toLocaleString();
+  document.getElementById('stat-quota-pct').textContent   = quotaPct;
+  document.getElementById('stat-quota-bar').style.width   = quotaPct + '%';
+  document.getElementById('stat-quota-bar').style.background = barColor;
+
+  // Request table
+  const tbody  = document.getElementById('req-tbody');
+  const empty  = document.getElementById('req-empty');
+  const table  = document.getElementById('req-table');
+  tbody.innerHTML = '';
+
+  if (all.length === 0) {
+    empty.classList.remove('hidden'); table.classList.add('hidden');
+  } else {
+    empty.classList.add('hidden'); table.classList.remove('hidden');
+    all.forEach(req => {
+      const isPending = req.status === 'รอดำเนินการ';
+      const sc = isPending ? '#D97706' : req.status === 'อนุมัติแล้ว' ? '#16A34A' : '#DC2626';
+      const sd = isPending ? '#FCD34D' : req.status === 'อนุมัติแล้ว' ? '#4ADE80' : '#F87171';
+      const tr = document.createElement('tr');
+      tr.id = 'row-' + req.reqId;
+      tr.innerHTML = `
+        <td style="white-space:nowrap;color:var(--muted);font-size:12px">${fmtDT(req.time)}</td>
+        <td style="font-family:monospace;font-size:12px;color:var(--accent);font-weight:700">${req.docNumber || '—'}</td>
+        <td style="font-weight:600">${req.branch}</td>
+        <td>${req.customer || '—'}</td>
+        <td style="color:var(--muted)">${req.phone || '—'}</td>
+        <td style="font-weight:700;color:var(--primary)">${req.orderValue ? '฿' + req.orderValue.toLocaleString() : '—'}</td>
+        <td>
+          <span style="font-weight:700">${req.qty}</span>
+          <span style="color:var(--muted);font-size:12px"> (฿${(req.qty*100).toLocaleString()})</span>
+        </td>
+        <td style="color:var(--muted);font-size:12px">${req.reason || '—'}</td>
+        <td>
+          <span class="status-dot" style="background:${sd}"></span>
+          <span style="color:${sc};font-weight:600">${req.status}</span>
+          ${req.approvedBy ? '<div style="font-size:11px;color:var(--muted)">โดย ' + req.approvedBy + '</div>' : ''}
+        </td>
+        <td style="white-space:nowrap">
+          ${isPending
+            ? `<button class="act-approve" onclick="openPinModal('${req.reqId}','approve')">✓ อนุมัติ</button>
+               <button class="act-reject"  onclick="openPinModal('${req.reqId}','reject')">ปฏิเสธ</button>`
+            : ''}
+          <button class="act-delete" onclick="openPinModal('${req.reqId}','delete')">🗑 ลบ</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Quota table
+  const usedMap = {};
+  all.filter(r => r.status === 'อนุมัติแล้ว')
+     .forEach(r => { usedMap[r.branch] = (usedMap[r.branch] || 0) + r.qty; });
+
+  const qtbody = document.getElementById('quota-tbody');
+  qtbody.innerHTML = '';
+  BRANCHES.forEach(b => {
+    const used = usedMap[b.name] || 0;
+    const rem  = b.quota - used;
+    const pct  = Math.min(100, Math.round(used / b.quota * 100));
+    const bc   = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#22C55E';
+    const remColor = rem <= 5 ? 'var(--danger)' : rem <= 20 ? 'var(--warning)' : 'var(--success)';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight:600">${b.name}</td>
+      <td style="text-align:right;color:var(--muted)">${b.quota.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700;color:${used > 0 ? 'var(--text)' : 'var(--muted)'}">${used.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700;color:${remColor}">${rem.toLocaleString()}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="quota-bar-bg">
+            <div class="quota-bar-fill" style="width:${pct}%;background:${bc}"></div>
+          </div>
+          <span style="font-size:12px;color:var(--muted);min-width:30px">${pct}%</span>
+        </div>
+      </td>`;
+    qtbody.appendChild(tr);
+  });
+
+  const now = new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  document.getElementById('refresh-note').textContent = 'อัปเดตล่าสุด ' + now;
+}
+
+// ===== PIN MODAL =====
+let _pinAction = null, _pinReqId = null;
+
+function openPinModal(reqId, action) {
+  _pinReqId = reqId; _pinAction = action;
+  const labels = {approve:'อนุมัติคำขอ', reject:'ปฏิเสธคำขอ', delete:'ลบคำขอ'};
+  const colors = {approve:'var(--success)', reject:'var(--danger)', delete:'var(--danger)'};
+  const btnTxt = {approve:'✓ ยืนยันอนุมัติ', reject:'ยืนยันปฏิเสธ', delete:'🗑 ยืนยันลบ'};
+
+  const el = document.getElementById('pin-modal-overlay');
+  document.getElementById('pin-modal-title').textContent = labels[action] + ' ' + reqId;
+  document.getElementById('pin-modal-confirm').textContent = btnTxt[action];
+  document.getElementById('pin-modal-confirm').style.background = colors[action];
+  document.getElementById('pin-modal-err').textContent = '';
+  document.getElementById('pin-modal-input').value = '';
+  el.classList.remove('hidden');
+  setTimeout(() => document.getElementById('pin-modal-input').focus(), 80);
+}
+
+function closePinModal() {
+  document.getElementById('pin-modal-overlay').classList.add('hidden');
+  _pinAction = null; _pinReqId = null;
+}
+
+function confirmPinModal() {
+  const val = document.getElementById('pin-modal-input').value;
+  const inp = document.getElementById('pin-modal-input');
+  if (val !== APPROVE_CODE) {
+    inp.value = '';
+    inp.classList.add('shake');
+    document.getElementById('pin-modal-err').textContent = '❌ รหัสไม่ถูกต้อง';
+    setTimeout(() => inp.classList.remove('shake'), 400);
+    return;
+  }
+  const action = _pinAction, reqId2 = _pinReqId;
+  closePinModal();
+
+  const req = requests.find(r => r.reqId === reqId2);
+  if (!req || !req.fbKey) return;
+  const fbKey = req.fbKey;
+
+  if (action === 'approve') {
+    db.ref('requests/' + fbKey).update({
+      status: 'อนุมัติแล้ว', approvedBy: 'Admin',
+      approvedAt: new Date().toISOString()
+    });
+  } else if (action === 'reject') {
+    db.ref('requests/' + fbKey).update({
+      status: 'ปฏิเสธ', approvedBy: 'Admin',
+      approvedAt: new Date().toISOString()
+    });
+  } else if (action === 'delete') {
+    db.ref('requests/' + fbKey).remove();
+  }
+  // renderSummary() จะถูกเรียกอัตโนมัติจาก listener
+}
+
+function isToday(str) {
+  if (!str) return false;
+  const d = new Date(str), t = new Date();
+  return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+}
+
+function fmtDT(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return d.toLocaleDateString('th-TH', {day:'2-digit', month:'short'}) + ' ' +
+         d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+}
+
+// ===== EXPORT EXCEL =====
+function exportExcel() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', {day:'2-digit',month:'short',year:'numeric'});
+  const timeStr = now.toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+
+  // Sheet 1: รายการคำขอ
+  const reqRows = [
+    ['รายการคำขออนุมัติคูปอง — Beger DoHome', '', '', '', '', '', '', ''],
+    ['วันที่ Export:', dateStr + ' ' + timeStr, '', '', '', '', '', ''],
+    [''],
+    ['วันที่/เวลา', 'เลขที่คำขอ', 'เลขที่เอกสาร', 'สาขา', 'ลูกค้า', 'เบอร์โทร', 'มูลค่าสั่งซื้อ (฿)', 'คูปอง (ใบ)', 'มูลค่าคูปอง (฿)', 'เหตุผล', 'สถานะ', 'อนุมัติโดย', 'วันที่อนุมัติ']
+  ];
+  requests.forEach(r => {
+    reqRows.push([
+      fmtDT(r.time),
+      r.reqId,
+      r.docNumber || '',
+      r.branch,
+      r.customer || '',
+      r.phone || '',
+      r.orderValue || 0,
+      r.qty,
+      r.qty * 100,
+      r.reason || '',
+      r.status,
+      r.approvedBy || '',
+      r.approvedAt ? fmtDT(r.approvedAt) : ''
+    ]);
+  });
+
+  // Summary row
+  const totalUsed = requests.filter(r => r.status === 'อนุมัติแล้ว').reduce((s, r) => s + r.qty, 0);
+  reqRows.push(['']);
+  reqRows.push(['', '', '', '', '', '', 'รวมอนุมัติ', totalUsed, totalUsed * 100, '', '', '']);
+
+  // Sheet 2: โควต้ารายสาขา
+  const usedMap = {};
+  requests.filter(r => r.status === 'อนุมัติแล้ว').forEach(r => { usedMap[r.branch] = (usedMap[r.branch] || 0) + r.qty; });
+  const quotaRows = [
+    ['โควต้ารายสาขา — Beger DoHome', '', '', '', ''],
+    ['วันที่ Export:', dateStr + ' ' + timeStr, '', '', ''],
+    [''],
+    ['สาขา', 'โควต้า (ใบ)', 'ใช้ไปแล้ว (ใบ)', 'คงเหลือ (ใบ)', '% การใช้งาน']
+  ];
+  BRANCHES.forEach(b => {
+    const used = usedMap[b.name] || 0;
+    quotaRows.push([b.name, b.quota, used, b.quota - used, +(used / b.quota * 100).toFixed(1)]);
+  });
+  const totalQuota = BRANCHES.reduce((s, b) => s + b.quota, 0);
+  quotaRows.push(['']);
+  quotaRows.push(['รวมทั้งหมด', totalQuota, totalUsed, totalQuota - totalUsed, +(totalUsed / totalQuota * 100).toFixed(1)]);
+
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.aoa_to_sheet(reqRows);
+  ws1['!cols'] = [14,14,16,20,16,14,16,10,14,18,14,12,14].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, 'รายการคำขอ');
+
+  const ws2 = XLSX.utils.aoa_to_sheet(quotaRows);
+  ws2['!cols'] = [22,14,14,14,14].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws2, 'โควต้ารายสาขา');
+
+  const fname = 'DoHome_Coupon_' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '.xlsx';
+  XLSX.writeFile(wb, fname);
+}
+
+init();
+</script>
+
+<!-- PIN MODAL -->
+<div id="pin-modal-overlay" class="pin-modal-overlay hidden" onclick="if(event.target===this)closePinModal()">
+  <div class="pin-modal">
+    <div class="pin-modal-title" id="pin-modal-title">ยืนยันการดำเนินการ</div>
+    <div class="pin-modal-sub">กรอกรหัสยืนยัน 321</div>
+    <input type="password" class="pin-modal-input" id="pin-modal-input" maxlength="6" placeholder="•••"
+      onkeydown="if(event.key==='Enter')confirmPinModal();if(event.key==='Escape')closePinModal()">
+    <div class="pin-modal-err" id="pin-modal-err"></div>
+    <div class="pin-modal-btns">
+      <button class="pin-modal-cancel" onclick="closePinModal()">ยกเลิก</button>
+      <button class="pin-modal-confirm" id="pin-modal-confirm" onclick="confirmPinModal()">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
